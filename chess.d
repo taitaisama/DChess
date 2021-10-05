@@ -70,7 +70,9 @@ string makeKillFunctions (int type, bool isPawn, bool isBlack, bool isFirst){
 	  unmakePawnPromotion(" ~ to!string(isBlack) ~ ", " ~ to!string(type) ~ ", moves[i].piecePos, sq );";
       if (isFirst){
 	output ~= "
-          insertMove(move(moves[i].piecePos, sq, 0, "~ to!string(type) ~ ", score), " ~ to!string(isBlack) ~ ");";
+          insertMove(move(moves[i].piecePos, sq, moves[i].pieceType, "~ to!string(type) ~ ", score " ~
+	  //"+ castlePenalty(move(moves[i].piecePos, sq, moves[i].pieceType, "~ to!string(type) ~ ", score)," ~ to!string(isBlack) ~ " )" ~
+	  "), " ~ to!string(isBlack) ~ ");";
       }
     output ~= "
 	}
@@ -83,7 +85,9 @@ string makeKillFunctions (int type, bool isPawn, bool isBlack, bool isFirst){
   
   if (isFirst){
     output ~= "
-          insertMove(move(moves[i].piecePos, sq, moves[i].pieceType, "~ to!string(type) ~ ", score), " ~ to!string(isBlack) ~ ");";
+          insertMove(move(moves[i].piecePos, sq, moves[i].pieceType, "~ to!string(type) ~ ", score "
+      //~"+ castlePenalty(move(moves[i].piecePos, sq, moves[i].pieceType, "~ to!string(type) ~ ", score)," ~ to!string(isBlack) ~ " )"
+       ~ "), " ~ to!string(isBlack) ~ ");";
   }
   if (isPawn){
     output ~= "}";
@@ -154,6 +158,10 @@ struct Chess_state {
   }
   
   this (bool a){
+    castle[0][0] = true;
+    castle[1][0] = true;
+    castle[0][1] = true;
+    castle[1][1] = true;
     for (int i = 0; i < 16; i ++){
       occupied[0] |= (1uL << i);
     }
@@ -285,6 +293,11 @@ struct Chess_state {
 	}
 	assert (x == 0);
         x = pieces[1][i] & pieces[1][j];
+	if (x != 0){
+	  writeln(i, " ", j);
+	  printBoard(pieces[1][i]);
+	  printBoard(pieces[1][j]);
+	}
 	assert (x == 0);
       }
     }
@@ -294,7 +307,13 @@ struct Chess_state {
       wcalc |= pieces[0][i];
       bcalc |= pieces[1][i];
     }
+    if ((wcalc & bcalc) != 0){
+      print();
+    }
     assert((wcalc & bcalc) == 0);
+    if (!(wcalc == occupied[0] && bcalc == occupied[1])){
+      print();
+    }
     assert(wcalc == occupied[0] && bcalc == occupied[1]);
     int calcEval = 0;
     for (int i = 0; i < 6; i ++){
@@ -361,116 +380,137 @@ struct Chess_state {
     int penalty = 0;
     if (isBlack){
       if (castle[1][0]){
-	if (m.playType == 5){
-	  return 50;
-	}
-	else if (m.playType == 3 && m.initialPos == 56){
-	  if (castle[1][1]){
-	    return 15;
-	  }
-	  else {
-	    return 50;
-	  }
-	}
+  	if (m.playType == 5){
+  	  return 50;
+  	}
+  	else if (m.playType == 3 && m.initialPos == 56){
+  	  if (castle[1][1]){
+  	    return 15;
+  	  }
+  	  else {
+  	    return 50;
+  	  }
+  	}
       }
       else if (castle[1][1]){
-	if (m.playType == 5){
-	  return 50;
-	}
-	else if (m.playType == 3 && m.initialPos == 63){
-	  if (castle[1][0]){
-	    return 15;
-	  }
-	  else {
-	    return 50;
-	  }
-	}
+  	if (m.playType == 5){
+  	  return 50;
+  	}
+  	else if (m.playType == 3 && m.initialPos == 63){
+  	  if (castle[1][0]){
+  	    return 15;
+  	  }
+  	  else {
+  	    return 50;
+  	  }
+  	}
       }
     }
     else {
       if (castle[0][0]){
-	if (m.playType == 5){
-	  return 50;
-	}
-	else if (m.playType == 3 && m.initialPos == 0){
-	  if (castle[0][1]){
-	    return 15;
-	  }
-	  else {
-	    return 50;
-	  }
-	}
+  	if (m.playType == 5){
+  	  return 50;
+  	}
+  	else if (m.playType == 3 && m.initialPos == 0){
+  	  if (castle[0][1]){
+  	    return 15;
+  	  }
+  	  else {
+  	    return 50;
+  	  }
+  	}
       }
       else if (castle[0][1]){
-	if (m.playType == 5){
-	  return 50;
-	}
-	else if (m.playType == 3 && m.initialPos == 7){
-	  if (castle[0][0]){
-	    return 15;
-	  }
-	  else {
-	    return 50;
-	  }
-	}
+  	if (m.playType == 5){
+  	  return 50;
+  	}
+  	else if (m.playType == 3 && m.initialPos == 7){
+  	  if (castle[0][0]){
+  	    return 15;
+  	  }
+  	  else {
+  	    return 50;
+  	  }
+  	}
       }
     }
     return 0;
   }
 
   void makeCastle (bool isBlack, bool isRight){
+    // writeln("make caslte ", isBlack, " ", isRight);
     if (isBlack){
       if (isRight){
-	pieces[1][5] = (1uL << 62);
-	pieces[1][3] ^= (1uL << 63)|(1uL << 61);
+	ulong a = (1uL << 62)|(1uL << 59);
+	ulong b = (1uL << 63)|(1uL << 61);
+	pieces[1][5] ^= a;
+	pieces[1][3] ^= b;
+	occupied[1] ^= a|b;
 	evaluation -= positionEval[1][5][62] - positionEval[1][5][59] + positionEval[1][3][61] - positionEval[1][3][63];
       }
       else {
-	pieces[1][5] = (1uL << 57);
-	pieces[1][3] ^= (1uL << 56)|(1uL << 58);
+	ulong a = (1uL << 57)|(1uL << 59);
+	ulong b = (1uL << 56)|(1uL << 58);
+	pieces[1][5] ^= a;
+	pieces[1][3] ^= b;
+	occupied[1] ^= a|b;
 	evaluation -= positionEval[1][5][57] - positionEval[1][5][59] + positionEval[1][3][58] - positionEval[1][3][56];
       }
-      castle[1][1] = false;
-      castle[1][0] = false;
     }
     else {
       if (isRight){
-	pieces[1][5] = (1uL << 6);
-	pieces[1][3] ^= (1uL << 7)|(1uL << 5);
+	ulong a = (1uL << 6)|(1uL << 3);
+	ulong b = (1uL << 7)|(1uL << 5);
+	pieces[0][5] ^= a;
+	pieces[0][3] ^= b;
+	occupied[0] ^= a|b;
 	evaluation += positionEval[0][5][6] - positionEval[0][5][3] + positionEval[0][3][5] - positionEval[0][3][7];
       }
       else {
-	pieces[1][5] = (1uL << 1);
-	pieces[1][3] ^= (1uL << 0)|(1uL << 2);
+	ulong a = (1uL << 1)|(1uL << 3);
+	ulong b = (1uL << 0)|(1uL << 2);
+	pieces[0][5] ^= a;
+	pieces[0][3] ^= b;
+	occupied[0] ^= a|b;
 	evaluation += positionEval[0][5][1] - positionEval[0][5][3] + positionEval[0][3][2] - positionEval[0][3][0];
       }
-      castle[1][1] = false;
-      castle[1][0] = false;
     }
   }
   
   void unmakeCastle (bool isBlack, bool isRight){
     if (isBlack){
       if (isRight){
-	pieces[1][5] = (1uL << 59);
-	pieces[1][3] ^= (1uL << 63)|(1uL << 61);
+	ulong a = (1uL << 62)|(1uL << 59);
+	ulong b = (1uL << 63)|(1uL << 61);
+	pieces[1][5] ^= a;
+	pieces[1][3] ^= b;
+	occupied[1] ^= a|b;
 	evaluation += positionEval[1][5][62] - positionEval[1][5][59] + positionEval[1][3][61] - positionEval[1][3][63];
       }
       else {
-	pieces[1][5] = (1uL << 59);
-	pieces[1][3] ^= (1uL << 56)|(1uL << 58);
+	ulong a = (1uL << 57)|(1uL << 59);
+	ulong b = (1uL << 56)|(1uL << 58);
+	pieces[1][5] ^= a;
+	pieces[1][3] ^= b;
+	occupied[1] ^= a|b;
 	evaluation += positionEval[1][5][57] - positionEval[1][5][59] + positionEval[1][3][58] - positionEval[1][3][56];
       }
     }
     else {
       if (isRight){
-	pieces[1][5] = (1uL << 3);
-	pieces[1][3] ^= (1uL << 7)|(1uL << 5);
+	ulong a = (1uL << 6)|(1uL << 3);
+	ulong b = (1uL << 7)|(1uL << 5);
+	pieces[0][5] ^= a;
+	pieces[0][3] ^= b;
+	occupied[0] ^= a|b;
 	evaluation -= positionEval[0][5][6] - positionEval[0][5][3] + positionEval[0][3][5] - positionEval[0][3][7];
       }
       else {
-	pieces[1][5] = (1uL << 3);
-	pieces[1][3] ^= (1uL << 0)|(1uL << 2);
+	ulong a = (1uL << 1)|(1uL << 3);
+	ulong b = (1uL << 0)|(1uL << 2);
+	pieces[0][5] ^= a;
+	pieces[0][3] ^= b;
+	occupied[0] ^= a|b;
 	evaluation -= positionEval[0][5][1] - positionEval[0][5][3] + positionEval[0][3][2] - positionEval[0][3][0];
       }
     }
@@ -553,7 +593,7 @@ struct Chess_state {
   
   void makeMove(move m, bool isBlack){
     import std.math;
-    if (m.playType == 5 && (abs(m.initialPos - m.finalPos) == 2 || abs(m.initialPos - m.finalPos) == 3)){
+    if (m.playType == 5 && (abs(m.initialPos - m.finalPos) == 2 || abs(m.initialPos - m.finalPos) == 3|| abs(m.initialPos - m.finalPos) == 4)){
       if (isBlack){
 	assert (m.initialPos == 59);
 	if (m.finalPos == 56){
@@ -752,8 +792,10 @@ struct Chess_state {
     if (castle[isBlack][0]){
       if (((occupied[0] | occupied[1]) & castle1) == 0){
 	makeCastle(isBlack, false);
+	castle[isBlack][0] = false;
 	int score = mini(alpha, beta, depth-1);
 	unmakeCastle(isBlack, false);
+	castle[isBlack][0] = true;
 	if ( isBlack && score < beta) {
 	  beta = score;
 	}
@@ -771,8 +813,10 @@ struct Chess_state {
     if (castle[isBlack][1]){
       if (((occupied[0] | occupied[1]) & castle2) == 0){
 	makeCastle(isBlack, true);
+	castle[isBlack][1] = false;
 	int score = mini(alpha, beta, depth-1);
 	unmakeCastle(isBlack, true);
+	castle[isBlack][1] = true;
 	if ( isBlack && score < beta) {
 	  beta = score;
 	}
@@ -839,7 +883,7 @@ struct Chess_state {
 	    score = mini(alpha, beta, depth-1);
 	  unmakeQuietMove(isBlack, moves[i].pieceType, moves[i].piecePos, sq);
 	}
-	insertMove(move(moves[i].piecePos, sq, moves[i].pieceType, 6, score), isBlack);
+	insertMove(move(moves[i].piecePos, sq, moves[i].pieceType, 6, score /*+ castlePenalty(move(moves[i].piecePos, sq, moves[i].pieceType, 6, score), isBlack)*/), isBlack);
       }
     }
   }
@@ -861,7 +905,7 @@ void main (){
   import std.random;
   auto rnd = Random(89);
   state.print();
-  state.currDepth = 7;
+  state.currDepth = 6;
   // state = Chess_state(1083062716, 14503496356863213568, -50, 1083060480, 0, 2080, 132, 16, 8, 19915557193121792, 4611686018427387904, 65536, 9295429630892703744, 4398046511104, 576460752303423488);
   // state.print();
   // maxi(int.min, int.max, currDepth);
