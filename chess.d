@@ -626,7 +626,7 @@ struct Chess_state {
   
 
   int maxi (int alpha, int beta, int depth){
-    assert_state();
+    // assert_state();
     if (depth == 0) return evaluation;
   
     moveSet [16] moves = genMoves(false);
@@ -679,7 +679,7 @@ struct Chess_state {
   }
 
   int mini (int alpha, int beta, int depth){
-    assert_state();
+    // assert_state();
     if (depth == 0) return  evaluation;
     moveSet [16] moves = genMoves(true);
     ulong kingPos = pieces[0][5];
@@ -731,7 +731,7 @@ struct Chess_state {
   }
 
   void minimax (int depth, bool isBlack){
-    assert_state();
+    // assert_state();
     for (int i = 0; i < firstSaveSize; i ++){
       if (isBlack)
 	bestMoves[i] = move(-1, -1, -1, -1, int.max);
@@ -855,7 +855,8 @@ void printMoves (moveSet [16] moves){
 Chess_state state = Chess_state(true);
 
 void main (){
-
+  
+  import std.datetime.systime : SysTime, Clock;
   preProcess();
   import std.random;
   auto rnd = Random(89);
@@ -875,11 +876,16 @@ void main (){
     // // state.bestMove.print();
     // state.makeMove(state.bestMove, true);
     // state.print();
+    SysTime start = Clock.currTime();
     state.minimax(state.currDepth, false);
     state.makeMove(state.bestMoves[4], false);
+    SysTime end = Clock.currTime();
     state.print();
+    writeln(end-start);
     state.minimax(state.currDepth, true);
     state.makeMove(state.bestMoves[4], true);
+    SysTime end2 = Clock.currTime();
     state.print();
+    writeln(end2 - end);
   }
 }
