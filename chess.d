@@ -37,159 +37,6 @@ struct move {
   }
 }
 
-string makeNegaKillFunctions (int type, bool isPawn, bool isFirst){
-    
-  import std.conv;
-  string start, end;
-  if (isPawn) {
-    start = "0"; end = "pidx";
-  }
-  else {
-    start = "pidx"; end = "kidx";
-  }
-  string checkString = "pieces[(!isBlack)][" ~ to!string(type) ~ "]";
-  string output = "
-   for (int i =" ~ start ~  "; i < " ~ end ~ "; i ++){
-      for (ulong b = moves[i].set & " ~ checkString ~ "; b!= 0; b &= (b-1)){
-	int sq = ffsl(b);
-        int score;";
-  if (isPawn){
-    output ~=
-      "if (sq >= 56){
-	  makePawnPromotion(isBlack, " ~ to!string(type) ~ ", moves[i].piecePos, sq );
-	  score = -nega(-beta, -alpha, depth-1, !isBlack);
-	  unmakePawnPromotion(isBlack, " ~ to!string(type) ~ ", moves[i].piecePos, sq );";
-    if (isFirst){
-	output ~= "
-          insertMove(move(moves[i].piecePos, sq, moves[i].pieceType, "~ to!string(type) ~ ", score "
-	  ~"+ castlePenalty(move(moves[i].piecePos, sq, moves[i].pieceType, "~ to!string(type) ~ ", score), isBlack)"
-	  ~"), isBlack);";
-      }
-    output ~= "
-	}
-	else {";
-  }
-  output ~= "
-	makeKillMove(isBlack, moves[i].pieceType, " ~ to!string(type) ~ ", moves[i].piecePos, sq);
-	score = -nega(-beta, -alpha, depth-1, !isBlack);
-	unmakeKillMove(isBlack, moves[i].pieceType, " ~ to!string(type) ~ ", moves[i].piecePos, sq);";
-  if (isFirst){
-    output ~= "
-          insertMove(move(moves[i].piecePos, sq, moves[i].pieceType, "~ to!string(type) ~ ", score "
-       ~"+ castlePenalty(move(moves[i].piecePos, sq, moves[i].pieceType, "~ to!string(type) ~ ", score), isBlack )"
-          ~"), isBlack);";
-  }
-  if (isPawn){
-    output ~= "}";
-  }
-  if (!isFirst) {
-    output ~= "if (score >= beta) return beta;
-             if (score > alpha) alpha = score;
-             ";
-  }
-  output ~= "
-      }
-    }";
-  return output;
-}
-
-string makeKillFunctions (int type, bool isPawn, bool isBlack, bool isFirst, bool isQs){
-    
-  import std.conv;
-  string start, end;
-  if (isPawn) {
-    start = "0"; end = "pidx";
-  }
-  else {
-    start = "pidx"; end = "kidx";
-  }
-  string checkString;
-  string call;
-  
-  if (isBlack){
-    checkString = "pieces[0][" ~ to!string(type) ~ "]";
-    if (isQs)
-      call = "qsmaxi(alpha, beta);";
-    else 
-      call = "maxi(alpha, beta, depth-1);";
-  }
-  else {
-    checkString = "pieces[1][" ~ to!string(type) ~ "]";
-    if (isQs)
-      call = "qsmini(alpha, beta);";
-    else 
-      call = "mini(alpha, beta, depth-1);";
-  }
-  string output = "
-   for (int i =" ~ start ~  "; i < " ~ end ~ "; i ++){
-      for (ulong b = moves[i].set & " ~ checkString ~ "; b!= 0; b &= (b-1)){
-	int sq = ffsl(b);
-        int score;";
-  if (isPawn){
-    output ~=
-      "if (sq >= 56){
-	  makePawnPromotion(" ~ to!string(isBlack) ~ ", " ~ to!string(type) ~ ", moves[i].piecePos, sq );
-	  score = " ~ call ~ "
-	  unmakePawnPromotion(" ~ to!string(isBlack) ~ ", " ~ to!string(type) ~ ", moves[i].piecePos, sq );";
-      if (isFirst){
-	output ~= "
-          insertMove(move(moves[i].piecePos, sq, moves[i].pieceType, "~ to!string(type) ~ ", score "
-	  ~"+ castlePenalty(move(moves[i].piecePos, sq, moves[i].pieceType, "~ to!string(type) ~ ", score)," ~ to!string(isBlack) ~ " )"
-	  ~"), " ~ to!string(isBlack) ~ ");";
-      }
-    output ~= "
-	}
-	else {";
-  }
-  output ~= "
-	makeKillMove(" ~ to!string(isBlack) ~ ", moves[i].pieceType, " ~ to!string(type) ~ ", moves[i].piecePos, sq);
-	score = " ~ call ~ "
-	unmakeKillMove(" ~ to!string(isBlack) ~ ", moves[i].pieceType, " ~ to!string(type) ~ ", moves[i].piecePos, sq);";
-  
-  if (isFirst){
-    output ~= "
-          insertMove(move(moves[i].piecePos, sq, moves[i].pieceType, "~ to!string(type) ~ ", score "
-       ~"+ castlePenalty(move(moves[i].piecePos, sq, moves[i].pieceType, "~ to!string(type) ~ ", score)," ~ to!string(isBlack) ~ " )"
-          ~"), " ~ to!string(isBlack) ~ ");";
-  }
-  if (isPawn){
-    output ~= "}";
-  }
-  if (!isFirst){
-    if (isBlack){
-      output ~= "
-	if (score <= alpha) return alpha;
-	if (score < beta) {
-	  beta = score;
-        }";
-    }
-    else {
-      output ~= "if (score >= beta) return beta;
-	if (score > alpha) {
-	  alpha = score;
-        }";
-    }
-  }
-  else {
-    if (isBlack){
-      output ~= "
-	if (score <= alpha) return;
-	if (score < beta) {
-	  beta = score;
-        }";
-    }
-    else {
-      output ~= "if (score >= beta) return;
-	if (score > alpha) {
-	  alpha = score;
-        }";
-    }
-  }
-  output ~= "
-      }
-    }";
-  return output;
-}
 int numStates = 0;
 
 struct Chess_state {
@@ -454,67 +301,6 @@ struct Chess_state {
     }
   }
 
-  int castlePenalty (move m, bool isBlack){
-    int penalty = 0;
-    if (isBlack){
-      if (castle[1][0]){
-  	if (m.playType == 5){
-  	  return 50;
-  	}
-  	else if (m.playType == 3 && m.initialPos == 56){
-  	  if (castle[1][1]){
-  	    return 15;
-  	  }
-  	  else {
-  	    return 50;
-  	  }
-  	}
-      }
-      else if (castle[1][1]){
-  	if (m.playType == 5){
-  	  return 50;
-  	}
-  	else if (m.playType == 3 && m.initialPos == 63){
-  	  if (castle[1][0]){
-  	    return 15;
-  	  }
-  	  else {
-  	    return 50;
-  	  }
-  	}
-      }
-    }
-    else {
-      if (castle[0][0]){
-  	if (m.playType == 5){
-  	  return -50;
-  	}
-  	else if (m.playType == 3 && m.initialPos == 0){
-  	  if (castle[0][1]){
-  	    return -15;
-  	  }
-  	  else {
-  	    return -50;
-  	  }
-  	}
-      }
-      else if (castle[0][1]){
-  	if (m.playType == 5){
-  	  return -50;
-  	}
-  	else if (m.playType == 3 && m.initialPos == 7){
-  	  if (castle[0][0]){
-  	    return -15;
-  	  }
-  	  else {
-  	    return -50;
-  	  }
-  	}
-      }
-    }
-    return 0;
-  }
-
   void makeCastle (bool isBlack, bool isRight){
     // writeln("make caslte ", isBlack, " ", isRight);
     if (isBlack){
@@ -723,441 +509,216 @@ struct Chess_state {
       castle[1][1] = false;
     }
   }
-
-  moveSet [16] genMoves (bool isBlack){
-    moveSet [16] moves;
-    //each piece one by one
-    int idx = 0;
-    ulong occupied = occupied[0] | occupied[1];
-    for (ulong b = pieces[isBlack][0]; b != 0; b &= (b-1), idx ++){
-      int sq = ffsl(b);
-      moves[idx] = moveSet(0, pawnMoves(occupied, sq, isBlack), sq);
-    }
-    for (int j = 1; j < 6; j ++){
-      for (ulong b = pieces[isBlack][j]; b != 0; b &= (b-1), idx ++){
-	int sq = ffsl(b);
-	moves[idx] = moveSet(j, pieceMoves(occupied, j, sq), sq);
-      }
-    }
-    return moves;
+  int evaluate(){
+    return evaluation;
   }
-
-  int nega (int alpha, int beta, int depth, bool isBlack){
-    if (depth == 0) return evaluation;
-    moveSet [16] moves = genMoves(false);
-    ulong kingPos = pieces[(!isBlack)][5];
-    int kidx;
-    for (kidx = 0; moves[kidx].pieceType != 5; kidx ++){
-      if ((moves[kidx].set & kingPos) != 0){
-	if (isBlack)
-	  return int.min + 51;
-	else 
-	  return int.max - 51;
-      }
+  void changeCastle (bool isBlack, int moveType, int finalsquare, int initialsquare){
+    if (finalsquare == 0 || initialsquare == 0){
+      castle[0][0] = false;
     }
-    if ((moves[kidx].set & kingPos) != 0){
-	if (isBlack)
-	  return int.min + 51;
-	else 
-	  return int.max - 51;
+    if (finalsquare == 7 || initialsquare == 7){
+      castle[0][1] = false;
     }
-    kidx ++;
-    int pidx;
-    for (pidx = 0; moves[pidx].pieceType == 0; pidx ++){}
-    mixin(makeNegaKillFunctions(4, true, false));
-    mixin(makeNegaKillFunctions(3, true, false));
-    mixin(makeNegaKillFunctions(2, true, false));
-    mixin(makeNegaKillFunctions(1, true, false));
-    mixin(makeNegaKillFunctions(0, true, false));
-    mixin(makeNegaKillFunctions(4, false, false));
-    mixin(makeNegaKillFunctions(3, false, false));
-    mixin(makeNegaKillFunctions(2, false, false));
-    mixin(makeNegaKillFunctions(1, false, false));
-    mixin(makeNegaKillFunctions(0, false, false));
-    ulong tolOccupied = occupied[1] | occupied[0];
-    for (int i = 0; i < kidx; i ++){
-      for (ulong b = moves[i].set & ~tolOccupied; b!= 0; b &= (b-1)){
-	int sq = ffsl(b);
-	int score;
-	if (moves[i].pieceType == 0 && sq >= 56){
-	  makePawnPromotion(isBlack, 6, moves[i].piecePos, sq);
-	  score = -nega(-beta, -alpha, depth-1, !isBlack);
-	  unmakePawnPromotion(isBlack, 6, moves[i].piecePos, sq);
-	}
-	else {
-	  makeQuietMove(isBlack, moves[i].pieceType, moves[i].piecePos, sq);
-	  score = -nega(-beta, -alpha, depth-1, !isBlack);
-	  unmakeQuietMove(false, moves[i].pieceType, moves[i].piecePos, sq);
-	}
-	if (score >= beta) return beta;
-	if (score > alpha) alpha = score;
-      }
+    if (finalsquare == 56 || initialsquare == 56){
+      castle[1][0] = false;
     }
-    return alpha;
-  }
-
-  void negaDriver (int depth, bool isBlack){
-    for (int i = 0; i < firstSaveSize; i ++){
-      if (isBlack)
-	bestMoves[i] = move(-1, -1, -1, -1, int.max);
-      else 
-	bestMoves[i] = move(-1, -1, -1, -1, int.min);
+    if (finalsquare == 63 || initialsquare == 63){
+      castle[1][1] = false;
     }
-    int alpha = int.min;
-    int beta = int.max;
-    ulong castle1, castle2;
-    if (isBlack){
-      castle1 = 432345564227567616uL;
-      castle2 = 8070450532247928832uL;
-    }
-    else {
-      castle1 = 6uL;
-      castle2 = 112uL;
-    }
-    if (castle[isBlack][0]){
-      if (((occupied[0] | occupied[1]) & castle1) == 0){
-	makeCastle(isBlack, false);
-	castle[isBlack][0] = false;
-	int score = -nega(-beta, -alpha, depth-1, !isBlack);
-	unmakeCastle(isBlack, false);
-	castle[isBlack][0] = true;
-        if (score > alpha){
-	  alpha = score;
-	}
-	if (isBlack){
-	  insertMove(move(59, 56, 5, 6, score), isBlack);
-	}
-	else {
-	  insertMove(move(3, 0, 5, 6, score), isBlack);
-	}
-      }
-    }
-    if (castle[isBlack][1]){
-      if (((occupied[0] | occupied[1]) & castle2) == 0){
-	makeCastle(isBlack, true);
-	castle[isBlack][1] = false;
-	int score = -nega(-beta, -alpha, depth-1, !isBlack);
-	unmakeCastle(isBlack, true);
-	castle[isBlack][1] = true;
-        if (score > alpha){
-	  alpha = score;
-	}
-	if (isBlack){
-	  insertMove(move(59, 63, 5, 6, score), isBlack);
-	}
-	else {
-	  insertMove(move(3, 7, 5, 6, score), isBlack);
-	}
-      }
+    if (moveType == 5){
+      castle[isBlack][0] = false;
+      castle[isBlack][1] = false;
     }
   }
-  
-
-  int maxi (int alpha, int beta, int depth){
-    assert_state();
-    if (depth == 0) return evaluation;
-  
-    moveSet [16] moves = genMoves(false);
-    ulong kingPos = pieces[1][5];
-    int kidx;
-    for (kidx = 0; moves[kidx].pieceType != 5; kidx ++){
-      if ((moves[kidx].set & kingPos) != 0){
-	return int.max - 51;
-      }
-    }
-    if ((moves[kidx].set & kingPos) != 0){
-      return int.max - 51;
-    }
-    kidx ++;
-    int pidx;
-    for (pidx = 0; moves[pidx].pieceType == 0; pidx ++){}
-    mixin(makeKillFunctions(4, true, false, false, false));
-    mixin(makeKillFunctions(3, true, false, false, false));
-    mixin(makeKillFunctions(2, true, false, false, false));
-    mixin(makeKillFunctions(1, true, false, false, false));
-    mixin(makeKillFunctions(0, true, false, false, false));
-    mixin(makeKillFunctions(4, false, false, false, false));
-    mixin(makeKillFunctions(3, false, false, false, false));
-    mixin(makeKillFunctions(2, false, false, false, false));
-    mixin(makeKillFunctions(1, false, false, false, false));
-    mixin(makeKillFunctions(0, false, false, false, false));
-   
-    ulong tolOccupied = occupied[1] | occupied[0];
-    for (int i = 0; i < kidx; i ++){
-      for (ulong b = moves[i].set & ~tolOccupied; b!= 0; b &= (b-1)){
-	int sq = ffsl(b);
-	int score;
-	if (moves[i].pieceType == 0 && sq >= 56){
-	  makePawnPromotion(false, 6, moves[i].piecePos, sq);
-	  score = mini(alpha, beta, depth-1);
-	  unmakePawnPromotion(false, 6, moves[i].piecePos, sq);
-	}
-	else {
-	  makeQuietMove(false, moves[i].pieceType, moves[i].piecePos, sq);
-	  score = mini(alpha, beta, depth-1);
-	  unmakeQuietMove(false, moves[i].pieceType, moves[i].piecePos, sq);
-	}
-	if (score >= beta) return beta;
-	if (score > alpha) {
-	  alpha = score;
-	}
-      }
-    }
-    return alpha;
-  }
-
-  int mini (int alpha, int beta, int depth){
-    assert_state();
-    if (depth == 0) return evaluation;
-    moveSet [16] moves = genMoves(true);
-    ulong kingPos = pieces[0][5];
-    int kidx;
-    for (kidx = 0; moves[kidx].pieceType != 5; kidx ++){
-      if ((moves[kidx].set & kingPos) != 0){
-	return int.min + +51;
-      }
-    }
-    if ((moves[kidx].set & kingPos) != 0){
-      return int.min + +51;
-    }
-    kidx ++;
-    int pidx;
-    for (pidx = 0; moves[pidx].pieceType == 0; pidx ++){}
-    mixin(makeKillFunctions(4, true, true, false, false));
-    mixin(makeKillFunctions(3, true, true, false, false));
-    mixin(makeKillFunctions(2, true, true, false, false));
-    mixin(makeKillFunctions(1, true, true, false, false));
-    mixin(makeKillFunctions(0, true, true, false, false));
-    mixin(makeKillFunctions(4, false, true, false, false));
-    mixin(makeKillFunctions(3, false, true, false, false));
-    mixin(makeKillFunctions(2, false, true, false, false));
-    mixin(makeKillFunctions(1, false, true, false, false));
-    mixin(makeKillFunctions(0, false, true, false, false));
-    
-    ulong tolOccupied = occupied[1] | occupied[0];
-    for (int i = 0; i < kidx; i ++){
-      for (ulong b = moves[i].set & ~tolOccupied; b!= 0; b &= (b-1)){
-	int sq = ffsl(b);
-	int score;
-	if (moves[i].pieceType == 0 && sq >= 56){
-	  makePawnPromotion(true, 6, moves[i].piecePos, sq);
-	  score = maxi(alpha, beta, depth-1);
-	  unmakePawnPromotion(true, 6, moves[i].piecePos, sq);
-	}
-	else {
-	  makeQuietMove(true, moves[i].pieceType, moves[i].piecePos, sq);
-	  score = maxi(alpha, beta, depth-1);
-	  unmakeQuietMove(true, moves[i].pieceType, moves[i].piecePos, sq);
-	}
-	if (score <= alpha) return alpha;
-	if (score < beta) {
-	  beta = score;
-	}
-      }
-    }
-    return beta;
-  }
-
-  // int qsmini (int alpha, int beta){
-  //   if (evaluation > beta) return evaluation;
-  //   moveSet [16] moves = genMoves(true);
-  //   ulong kingPos = pieces[0][5];
-  //   int kidx;
-  //   for (kidx = 0; moves[kidx].pieceType != 5; kidx ++){
-  //     if ((moves[kidx].set & kingPos) != 0){
-  // 	return int.min + 1;
-  //     }
-  //   }
-  //   if ((moves[kidx].set & kingPos) != 0){
-  //     return int.min + 1;
-  //   }
-  //   kidx ++;
-  //   int pidx;
-  //   for (pidx = 0; moves[pidx].pieceType == 1; pidx ++){}
-  //   mixin(makeKillFunctions(4, true, true, false, true));
-  //   mixin(makeKillFunctions(3, true, true, false, true));
-  //   mixin(makeKillFunctions(2, true, true, false, true));
-  //   mixin(makeKillFunctions(1, true, true, false, true));
-  //   mixin(makeKillFunctions(0, true, true, false, true));
-  //   mixin(makeKillFunctions(4, false, true, false, true));
-  //   mixin(makeKillFunctions(3, false, true, false, true));
-  //   mixin(makeKillFunctions(2, false, true, false, true));
-  //   mixin(makeKillFunctions(1, false, true, false, true));
-  //   mixin(makeKillFunctions(0, false, true, false, true));
-  //   return beta;
-  // }
-  
-  // int qsmaxi (int alpha, int beta){
-  //   if (evaluation < alpha) return evaluation;
-  //   moveSet [16] moves = genMoves(false);
-  //   ulong kingPos = pieces[1][5];
-  //   int kidx;
-  //   for (kidx = 0; moves[kidx].pieceType != 5; kidx ++){
-  //     if ((moves[kidx].set & kingPos) != 0){
-  // 	return int.max - 1;
-  //     }
-  //   }
-  //   if ((moves[kidx].set & kingPos) != 0){
-  //     return int.max - 1;
-  //   }
-  //   kidx ++;
-  //   int pidx;
-  //   for (pidx = 0; moves[pidx].pieceType == 1; pidx ++){}
-  //   mixin(makeKillFunctions(4, true, false, false, true));
-  //   mixin(makeKillFunctions(3, true, false, false, true));
-  //   mixin(makeKillFunctions(2, true, false, false, true));
-  //   mixin(makeKillFunctions(1, true, false, false, true));
-  //   mixin(makeKillFunctions(0, true, false, false, true));
-  //   mixin(makeKillFunctions(4, false, false, false, true));
-  //   mixin(makeKillFunctions(3, false, false, false, true));
-  //   mixin(makeKillFunctions(2, false, false, false, true));
-  //   mixin(makeKillFunctions(1, false, false, false, true));
-  //   mixin(makeKillFunctions(0, false, false, false, true));
-  //   return alpha;
-  // }
-
-  void minimax (int depth, bool isBlack){
-    assert_state();
-    for (int i = 0; i < firstSaveSize; i ++){
-      if (isBlack)
-	bestMoves[i] = move(-1, -1, -1, -1, int.max);
-      else 
-	bestMoves[i] = move(-1, -1, -1, -1, int.min);
-    }
-    int alpha = int.min;
-    int beta = int.max;
-    ulong castle1, castle2;
-    if (isBlack){
-      castle1 = 432345564227567616uL;
-      castle2 = 8070450532247928832uL;
-    }
-    else {
-      castle1 = 6uL;
-      castle2 = 112uL;
-    }
-    if (castle[isBlack][0]){
-      if (((occupied[0] | occupied[1]) & castle1) == 0){
-	makeCastle(isBlack, false);
-	castle[isBlack][0] = false;
-	int score = mini(alpha, beta, depth-1);
-	unmakeCastle(isBlack, false);
-	castle[isBlack][0] = true;
-	if (isBlack){
-	  insertMove(move(59, 56, 5, 6, score), isBlack);
-	}
-	else {
-	  insertMove(move(3, 0, 5, 6, score), isBlack);
-	}
-	if ( isBlack) {
-	  if (score < beta){
-	    beta = score;
-	  }
-	  if (score <= alpha) return;
-	}
-	else {
-	  if (score > alpha){
-	    alpha = score;
-	  }
-	  if (score >= beta) return;
-	}
-      }
-    }
-    if (castle[isBlack][1]){
-      if (((occupied[0] | occupied[1]) & castle2) == 0){
-	makeCastle(isBlack, true);
-	castle[isBlack][1] = false;
-	int score = mini(alpha, beta, depth-1);
-	unmakeCastle(isBlack, true);
-	castle[isBlack][1] = true;
-        if (isBlack){
-	  insertMove(move(59, 63, 5, 6, score), isBlack);
-	}
-	else {
-	  insertMove(move(3, 7, 5, 6, score), isBlack);
-	}
-	if ( isBlack) {
-	  if (score < beta){
-	    beta = score;
-	  }
-	  if (score <= alpha) return;
-	}
-	else {
-	  if (score > alpha){
-	    alpha = score;
-	  }
-	  if (score >= beta) return;
-	}
-      }
-    }
+  int negamax (int alpha, int beta, int depth, bool isBlack){
+    if (depth == 0) return evaluate();
     moveSet [16] moves = genMoves(isBlack);
-    // printMoves(moves);
-    int kidx;
-    for (kidx = 0; moves[kidx].pieceType != 5; kidx ++){ }
-    kidx ++;
-    int pidx;
-    for (pidx = 0; moves[pidx].pieceType == 0; pidx ++){}
+    int lastIdx = 1;
+    for (; moves[lastIdx-1].pieceType != 5; lastIdx++){}
+    for (int movePieceIdx = 0; movePieceIdx < lastIdx; movePieceIdx ++){
+      if ((moves[movePieceIdx].set & pieces[(!isBlack)][5]) != 0) {
+	if (isBlack) return -5000;
+	else return 5000;
+      }
+    }
+    for (int killPiece = 4; killPiece >= 0; killPiece --){
+      for (int movePieceIdx = 0; movePieceIdx < lastIdx; movePieceIdx ++){
+	for (ulong b = moves[movePieceIdx].set & pieces[(!isBlack)][killPiece]; b != 0; b &= (b-1)){
+	  int sq = ffsl(b);
+	  bool [2][2] initCastle = castle;
+	  changeCastle(isBlack, moves[movePieceIdx].pieceType, sq, moves[movePieceIdx].initialPos);
+	  int score;
+	  if (moves[movePieceIdx].pieceType == 0 && (sq <= 7 || sq >= 56)){
+	    makePawnPromotion(isBlack, killPiece, moves[movePieceIdx].initialPos, sq);
+	    score = -negamax( -beta, -alpha, depth-1, (!isBlack));
+	    unmakePawnPromotion(isBlack, killPiece, moves[movePieceIdx].initialPos, sq);
+	  }
+	  else {
+	    makeKillMove(isBlack, move[movePieceIdx].pieceType, killPiece, moves[movePieceIdx].initialPos, sq);
+	    score = -negamax( -beta, -alpha, depth-1, (!isBlack));
+	    unmakeKillMove(isBlack, move[movePieceIdx].pieceType, killPiece, moves[movePieceIdx].initialPos, sq);
+	  }
+	  castle = initCastle;
+	  if( score >= beta ) return beta;   
+	  if( score > alpha ) alpha = score;
+	}
+      }
+    }
+    ulong totalOccupied = occupied[0] | occupied[1];
+    ulong castleRight, castleLeft;
     if (isBlack){
-      mixin(makeKillFunctions(4, true, true, true, false));
-      mixin(makeKillFunctions(3, true, true, true, false));
-      mixin(makeKillFunctions(2, true, true, true, false));
-      mixin(makeKillFunctions(1, true, true, true, false));
-      mixin(makeKillFunctions(0, true, true, true, false));
-      mixin(makeKillFunctions(4, false, true, true, false));
-      mixin(makeKillFunctions(3, false, true, true, false));
-      mixin(makeKillFunctions(2, false, true, true, false));
-      mixin(makeKillFunctions(1, false, true, true, false));
-      mixin(makeKillFunctions(0, false, true, true, false));
+      castleRight = 432345564227567616uL;
+      castleLeft = 8070450532247928832uL;
     }
     else {
-      mixin(makeKillFunctions(4, true, false, true, false));
-      mixin(makeKillFunctions(3, true, false, true, false));
-      mixin(makeKillFunctions(2, true, false, true, false));
-      mixin(makeKillFunctions(1, true, false, true, false));
-      mixin(makeKillFunctions(0, true, false, true, false));
-      mixin(makeKillFunctions(4, false, false, true, false));
-      mixin(makeKillFunctions(3, false, false, true, false));
-      mixin(makeKillFunctions(2, false, false, true, false));
-      mixin(makeKillFunctions(1, false, false, true, false));
-      mixin(makeKillFunctions(0, false, false, true, false));
+      castleRight = 6uL;
+      castleLeft = 112uL;
     }
-    
-    ulong tolOccupied = occupied[1] | occupied[0];
-    for (int i = 0; i < kidx; i ++){
-      for (ulong b = moves[i].set & ~tolOccupied; b!= 0; b &= (b-1)){
+    if (castle[isBlack][0] && (totalOccupied & castleLeft) == 0){
+      castle[isBlack][0] = false;
+      makeCastle(isBlack, false);
+      int score = -negamax( -beta, -alpha, depth-1, (!isBlack));
+      unmakeCastle(isBlack, false);
+      castle[isBlack][0] = true;
+      if( score >= beta ) return beta;   
+      if( score > alpha ) alpha = score;
+    }
+    if (castle[isBlack][1] && (totalOccupied & castleRight) == 0){
+      castle[isBlack][1] = false;
+      makeCastle(isBlack, true);
+      int score = -negamax( -beta, -alpha, depth-1, (!isBlack));
+      unmakeCastle(isBlack, true);
+      castle[isBlack][1] = true;
+      if( score >= beta ) return beta;   
+      if( score > alpha ) alpha = score;
+    }
+    for (int movePieceIdx = 0; movePieceIdx < lastIdx; movePieceIdx ++){
+      for (int b = moves[movePieceIdx].set & totalOccupied; b != 0; b &= (b-1)){
 	int sq = ffsl(b);
+	bool [2][2] initCastle = castle;
+	changeCastle(isBlack, moves[movePieceIdx].pieceType, sq, moves[movePieceIdx].initialPos);
 	int score;
-	if (moves[i].pieceType == 0 && sq >= 56){
-	  makePawnPromotion(isBlack, 6, moves[i].piecePos, sq);
-	  if (isBlack)
-	    score = maxi(alpha, beta, depth-1);
-	  else 
-	    score = mini(alpha, beta, depth-1);
-	  unmakePawnPromotion(isBlack, 6, moves[i].piecePos, sq);
+	if (moves[movePieceIdx].pieceType == 0 && (sq <= 7 || sq >= 56)){
+	  makePawnPromotion(isBlack, 6, moves[movePieceIdx].initialPos, sq);
+	  score = -negamax( -beta, -alpha, depth-1, (!isBlack));
+	  unmakePawnPromotion(isBlack, 6, moves[movePieceIdx].initialPos, sq);
 	}
 	else {
-	  makeQuietMove(isBlack, moves[i].pieceType, moves[i].piecePos, sq);
-	  if (isBlack)
-	    score = maxi(alpha, beta, depth-1);
-	  else 
-	    score = mini(alpha, beta, depth-1);
-	  unmakeQuietMove(isBlack, moves[i].pieceType, moves[i].piecePos, sq);
+	  makeQuietMove(isBlack, move[movePieceIdx].pieceType, moves[movePieceIdx].initialPos, sq);
+	  score = -negamax( -beta, -alpha, depth-1, (!isBlack));
+	  unmakeQuietMove(isBlack, move[movePieceIdx].pieceType, moves[movePieceIdx].initialPos, sq);
 	}
-	insertMove(move(moves[i].piecePos, sq, moves[i].pieceType, 6, score
-			+ castlePenalty(move(moves[i].piecePos, sq, moves[i].pieceType, 6, score), isBlack)
-			), isBlack);
+	castle = initCastle;
+	if( score >= beta ) return beta;   
+	if( score > alpha ) alpha = score;
+      }
+    }
+    return alpha;
+  }
 
-	if (isBlack){
-	  if (score <= alpha) return;
-	  if (score < beta) {
-	    beta = score;
+  void negaDriver (bool isBlack){
+    int alpha = int.min;
+    int beta = int.max;
+    int depth = currDepth;
+    moveSet [16] moves = genMoves(isBlack);
+    int lastIdx = 1;
+    for (; moves[lastIdx-1].pieceType != 5; lastIdx++){}
+    for (int i = 0; i < firstSaveSize; i ++){
+      if (isBlack)
+	bestMoves[i] = move(-1, -1, -1, -1, int.max);
+      else
+	bestMoves[i] = move(-1, -1, -1, -1, int.min);
+    }
+    for (int movePieceIdx = 0; movePieceIdx < lastIdx; movePieceIdx ++){
+      if ((moves[movePieceIdx].set & pieces[(!isBlack)][5]) != 0) {
+	assert(false);
+      }
+    }
+    for (int killPiece = 4; killPiece >= 0; killPiece --){
+      for (int movePieceIdx = 0; movePieceIdx < lastIdx; movePieceIdx ++){
+	for (ulong b = moves[movePieceIdx].set & pieces[(!isBlack)][killPiece]; b != 0; b &= (b-1)){
+	  int sq = ffsl(b);
+	  bool [2][2] initCastle = castle;
+	  changeCastle(isBlack, moves[movePieceIdx].pieceType, sq, moves[movePieceIdx].initialPos);
+	  int score;
+	  if (moves[movePieceIdx].pieceType == 0 && (sq <= 7 || sq >= 56)){
+	    makePawnPromotion(isBlack, killPiece, moves[movePieceIdx].initialPos, sq);
+	    score = -negamax( -beta, -alpha, depth-1, (!isBlack));
+	    unmakePawnPromotion(isBlack, killPiece, moves[movePieceIdx].initialPos, sq);
+	    insertMove(move(moves[movePieceIdx].initialPos, sq, 0, killPiece, score), isBlack);
 	  }
+	  else {
+	    makeKillMove(isBlack, move[movePieceIdx].pieceType, killPiece, moves[movePieceIdx].initialPos, sq);
+	    score = -negamax( -beta, -alpha, depth-1, (!isBlack));
+	    unmakeKillMove(isBlack, move[movePieceIdx].pieceType, killPiece, moves[movePieceIdx].initialPos, sq);
+	    insertMove(move(moves[movePieceIdx].initialPos, sq, moves[movePieceIdx].pieceType, killPiece, score), isBlack);
+	  }
+	  castle = initCastle;
+	  if( score >= beta ) return;   
+	  if( score > alpha ) alpha = score;
+	}
+      }
+    }
+    ulong totalOccupied = occupied[0] | occupied[1];
+    ulong castleRight, castleLeft;
+    if (isBlack){
+      castleRight = 432345564227567616uL;
+      castleLeft = 8070450532247928832uL;
+    }
+    else {
+      castleRight = 6uL;
+      castleLeft = 112uL;
+    }
+    if (castle[isBlack][0] && (totalOccupied & castleLeft) == 0){
+      castle[isBlack][0] = false;
+      makeCastle(isBlack, false);
+      int score = -negamax( -beta, -alpha, depth-1, (!isBlack));
+      unmakeCastle(isBlack, false);
+      castle[isBlack][0] = true;
+      if( score >= beta ) return;   
+      if( score > alpha ) alpha = score;
+      if (isBlack){
+	insertMove(move(59, 63, 5, 6, score), isBlack);
+      }
+      else {
+	insertMove(move(3, 7, 5, 6, score), isBlack);
+      }
+    }
+    if (castle[isBlack][1] && (totalOccupied & castleRight) == 0){
+      castle[isBlack][1] = false;
+      makeCastle(isBlack, true);
+      int score = -negamax( -beta, -alpha, depth-1, (!isBlack));
+      unmakeCastle(isBlack, true);
+      castle[isBlack][1] = true;
+      if( score >= beta ) return;   
+      if( score > alpha ) alpha = score;
+      if (isBlack){
+	insertMove(move(59, 56, 5, 6, score), isBlack);
+      }
+      else {
+	insertMove(move(3, 0, 5, 6, score), isBlack);
+      }
+    }
+    for (int movePieceIdx = 0; movePieceIdx < lastIdx; movePieceIdx ++){
+      for (int b = moves[movePieceIdx].set & totalOccupied; b != 0; b &= (b-1)){
+	int sq = ffsl(b);
+	bool [2][2] initCastle = castle;
+	changeCastle(isBlack, moves[movePieceIdx].pieceType, sq, moves[movePieceIdx].initialPos);
+	int score;
+	if (moves[movePieceIdx].pieceType == 0 && (sq <= 7 || sq >= 56)){
+	  makePawnPromotion(isBlack, 6, moves[movePieceIdx].initialPos, sq);
+	  score = -negamax( -beta, -alpha, depth-1, (!isBlack));
+	  unmakePawnPromotion(isBlack, 6, moves[movePieceIdx].initialPos, sq);
 	}
 	else {
-	  if (score >= beta) return;
-	  if (score > alpha) {
-	    alpha = score;
-	  }
+	  makeQuietMove(isBlack, move[movePieceIdx].pieceType, moves[movePieceIdx].initialPos, sq);
+	  score = -negamax( -beta, -alpha, depth-1, (!isBlack));
+	  unmakeQuietMove(isBlack, move[movePieceIdx].pieceType, moves[movePieceIdx].initialPos, sq);
+	  insertMove(move(moves[movePieceIdx].initialPos, sq, moves[movePieceIdx].pieceType, 6, score), isBlack);
 	}
+	castle = initCastle;
+	if( score >= beta ) return;   
+	if( score > alpha ) alpha = score;
       }
     }
   }
@@ -1180,27 +741,14 @@ void main (){
   auto rnd = Random(89);
   state.print();
   state.currDepth = 6;
-  // state = Chess_state(1083062716, 14503496356863213568, -50, 1083060480, 0, 2080, 132, 16, 8, 19915557193121792, 4611686018427387904, 65536, 9295429630892703744, 4398046511104, 576460752303423488);
-  // state.print();
-  // maxi(int.min, int.max, currDepth);
-  // bestMove.print();
-  // writeln(makeKillFunctions(3, false, false, false));
   while (true){
-    // state.maxi(int.min, int.max, state.currDepth);
-    // // state.bestMove.print();
-    // state.makeMove(state.bestMove, false);
-    // state.print();
-    // state.mini(int.min, int.max, state.currDepth);
-    // // state.bestMove.print();
-    // state.makeMove(state.bestMove, true);
-    // state.print();
     SysTime start = Clock.currTime();
-    state.minimax(state.currDepth, false);
+    state.negaDriver(false);
     state.makeMove(state.bestMoves[4], false);
     SysTime end = Clock.currTime();
     state.print();
     writeln(end-start);
-    state.minimax(state.currDepth, true);
+    state.negaDriver(true);
     state.makeMove(state.bestMoves[4], true);
     SysTime end2 = Clock.currTime();
     state.print();
