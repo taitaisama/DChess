@@ -37,7 +37,63 @@ struct move {
   }
 }
 
-string makeKillFunctions (int type, bool isPawn, bool isBlack, bool isFirst){
+string makeNegaKillFunctions (int type, bool isPawn, bool isFirst){
+    
+  import std.conv;
+  string start, end;
+  if (isPawn) {
+    start = "0"; end = "pidx";
+  }
+  else {
+    start = "pidx"; end = "kidx";
+  }
+  string checkString = "pieces[(!isBlack)][" ~ to!string(type) ~ "]";
+  string output = "
+   for (int i =" ~ start ~  "; i < " ~ end ~ "; i ++){
+      for (ulong b = moves[i].set & " ~ checkString ~ "; b!= 0; b &= (b-1)){
+	int sq = ffsl(b);
+        int score;";
+  if (isPawn){
+    output ~=
+      "if (sq >= 56){
+	  makePawnPromotion(isBlack, " ~ to!string(type) ~ ", moves[i].piecePos, sq );
+	  score = -nega(-beta, -alpha, depth-1, !isBlack);
+	  unmakePawnPromotion(isBlack, " ~ to!string(type) ~ ", moves[i].piecePos, sq );";
+    if (isFirst){
+	output ~= "
+          insertMove(move(moves[i].piecePos, sq, moves[i].pieceType, "~ to!string(type) ~ ", score "
+	  ~"+ castlePenalty(move(moves[i].piecePos, sq, moves[i].pieceType, "~ to!string(type) ~ ", score), isBlack)"
+	  ~"), isBlack);";
+      }
+    output ~= "
+	}
+	else {";
+  }
+  output ~= "
+	makeKillMove(isBlack, moves[i].pieceType, " ~ to!string(type) ~ ", moves[i].piecePos, sq);
+	score = -nega(-beta, -alpha, depth-1, !isBlack);
+	unmakeKillMove(isBlack, moves[i].pieceType, " ~ to!string(type) ~ ", moves[i].piecePos, sq);";
+  if (isFirst){
+    output ~= "
+          insertMove(move(moves[i].piecePos, sq, moves[i].pieceType, "~ to!string(type) ~ ", score "
+       ~"+ castlePenalty(move(moves[i].piecePos, sq, moves[i].pieceType, "~ to!string(type) ~ ", score), isBlack )"
+          ~"), isBlack);";
+  }
+  if (isPawn){
+    output ~= "}";
+  }
+  if (!isFirst) {
+    output ~= "if (score >= beta) return beta;
+             if (score > alpha) alpha = score;
+             ";
+  }
+  output ~= "
+      }
+    }";
+  return output;
+}
+
+string makeKillFunctions (int type, bool isPawn, bool isBlack, bool isFirst, bool isQs){
     
   import std.conv;
   string start, end;
@@ -49,13 +105,20 @@ string makeKillFunctions (int type, bool isPawn, bool isBlack, bool isFirst){
   }
   string checkString;
   string call;
+  
   if (isBlack){
     checkString = "pieces[0][" ~ to!string(type) ~ "]";
-    call = "maxi";
+    if (isQs)
+      call = "qsmaxi(alpha, beta);";
+    else 
+      call = "maxi(alpha, beta, depth-1);";
   }
   else {
     checkString = "pieces[1][" ~ to!string(type) ~ "]";
-    call = "mini";
+    if (isQs)
+      call = "qsmini(alpha, beta);";
+    else 
+      call = "mini(alpha, beta, depth-1);";
   }
   string output = "
    for (int i =" ~ start ~  "; i < " ~ end ~ "; i ++){
@@ -66,13 +129,13 @@ string makeKillFunctions (int type, bool isPawn, bool isBlack, bool isFirst){
     output ~=
       "if (sq >= 56){
 	  makePawnPromotion(" ~ to!string(isBlack) ~ ", " ~ to!string(type) ~ ", moves[i].piecePos, sq );
-	  score = " ~ call ~ "(alpha, beta, depth-1);
+	  score = " ~ call ~ "
 	  unmakePawnPromotion(" ~ to!string(isBlack) ~ ", " ~ to!string(type) ~ ", moves[i].piecePos, sq );";
       if (isFirst){
 	output ~= "
-          insertMove(move(moves[i].piecePos, sq, moves[i].pieceType, "~ to!string(type) ~ ", score " ~
-	  //"+ castlePenalty(move(moves[i].piecePos, sq, moves[i].pieceType, "~ to!string(type) ~ ", score)," ~ to!string(isBlack) ~ " )" ~
-	  "), " ~ to!string(isBlack) ~ ");";
+          insertMove(move(moves[i].piecePos, sq, moves[i].pieceType, "~ to!string(type) ~ ", score "
+	  ~"+ castlePenalty(move(moves[i].piecePos, sq, moves[i].pieceType, "~ to!string(type) ~ ", score)," ~ to!string(isBlack) ~ " )"
+	  ~"), " ~ to!string(isBlack) ~ ");";
       }
     output ~= "
 	}
@@ -80,14 +143,14 @@ string makeKillFunctions (int type, bool isPawn, bool isBlack, bool isFirst){
   }
   output ~= "
 	makeKillMove(" ~ to!string(isBlack) ~ ", moves[i].pieceType, " ~ to!string(type) ~ ", moves[i].piecePos, sq);
-	score = " ~ call ~ "(alpha, beta, depth-1);
+	score = " ~ call ~ "
 	unmakeKillMove(" ~ to!string(isBlack) ~ ", moves[i].pieceType, " ~ to!string(type) ~ ", moves[i].piecePos, sq);";
   
   if (isFirst){
     output ~= "
           insertMove(move(moves[i].piecePos, sq, moves[i].pieceType, "~ to!string(type) ~ ", score "
-      //~"+ castlePenalty(move(moves[i].piecePos, sq, moves[i].pieceType, "~ to!string(type) ~ ", score)," ~ to!string(isBlack) ~ " )"
-       ~ "), " ~ to!string(isBlack) ~ ");";
+       ~"+ castlePenalty(move(moves[i].piecePos, sq, moves[i].pieceType, "~ to!string(type) ~ ", score)," ~ to!string(isBlack) ~ " )"
+          ~"), " ~ to!string(isBlack) ~ ");";
   }
   if (isPawn){
     output ~= "}";
@@ -102,6 +165,21 @@ string makeKillFunctions (int type, bool isPawn, bool isBlack, bool isFirst){
     }
     else {
       output ~= "if (score >= beta) return beta;
+	if (score > alpha) {
+	  alpha = score;
+        }";
+    }
+  }
+  else {
+    if (isBlack){
+      output ~= "
+	if (score <= alpha) return;
+	if (score < beta) {
+	  beta = score;
+        }";
+    }
+    else {
+      output ~= "if (score >= beta) return;
 	if (score > alpha) {
 	  alpha = score;
         }";
@@ -409,27 +487,27 @@ struct Chess_state {
     else {
       if (castle[0][0]){
   	if (m.playType == 5){
-  	  return 50;
+  	  return -50;
   	}
   	else if (m.playType == 3 && m.initialPos == 0){
   	  if (castle[0][1]){
-  	    return 15;
+  	    return -15;
   	  }
   	  else {
-  	    return 50;
+  	    return -50;
   	  }
   	}
       }
       else if (castle[0][1]){
   	if (m.playType == 5){
-  	  return 50;
+  	  return -50;
   	}
   	else if (m.playType == 3 && m.initialPos == 7){
   	  if (castle[0][0]){
-  	    return 15;
+  	    return -15;
   	  }
   	  else {
-  	    return 50;
+  	    return -50;
   	  }
   	}
       }
@@ -663,10 +741,120 @@ struct Chess_state {
     }
     return moves;
   }
+
+  int nega (int alpha, int beta, int depth, bool isBlack){
+    if (depth == 0) return evaluation;
+    moveSet [16] moves = genMoves(false);
+    ulong kingPos = pieces[(!isBlack)][5];
+    int kidx;
+    for (kidx = 0; moves[kidx].pieceType != 5; kidx ++){
+      if ((moves[kidx].set & kingPos) != 0){
+	if (isBlack)
+	  return int.min + 51;
+	else 
+	  return int.max - 51;
+      }
+    }
+    if ((moves[kidx].set & kingPos) != 0){
+	if (isBlack)
+	  return int.min + 51;
+	else 
+	  return int.max - 51;
+    }
+    kidx ++;
+    int pidx;
+    for (pidx = 0; moves[pidx].pieceType == 0; pidx ++){}
+    mixin(makeNegaKillFunctions(4, true, false));
+    mixin(makeNegaKillFunctions(3, true, false));
+    mixin(makeNegaKillFunctions(2, true, false));
+    mixin(makeNegaKillFunctions(1, true, false));
+    mixin(makeNegaKillFunctions(0, true, false));
+    mixin(makeNegaKillFunctions(4, false, false));
+    mixin(makeNegaKillFunctions(3, false, false));
+    mixin(makeNegaKillFunctions(2, false, false));
+    mixin(makeNegaKillFunctions(1, false, false));
+    mixin(makeNegaKillFunctions(0, false, false));
+    ulong tolOccupied = occupied[1] | occupied[0];
+    for (int i = 0; i < kidx; i ++){
+      for (ulong b = moves[i].set & ~tolOccupied; b!= 0; b &= (b-1)){
+	int sq = ffsl(b);
+	int score;
+	if (moves[i].pieceType == 0 && sq >= 56){
+	  makePawnPromotion(isBlack, 6, moves[i].piecePos, sq);
+	  score = -nega(-beta, -alpha, depth-1, !isBlack);
+	  unmakePawnPromotion(isBlack, 6, moves[i].piecePos, sq);
+	}
+	else {
+	  makeQuietMove(isBlack, moves[i].pieceType, moves[i].piecePos, sq);
+	  score = -nega(-beta, -alpha, depth-1, !isBlack);
+	  unmakeQuietMove(false, moves[i].pieceType, moves[i].piecePos, sq);
+	}
+	if (score >= beta) return beta;
+	if (score > alpha) alpha = score;
+      }
+    }
+    return alpha;
+  }
+
+  void negaDriver (int depth, bool isBlack){
+    for (int i = 0; i < firstSaveSize; i ++){
+      if (isBlack)
+	bestMoves[i] = move(-1, -1, -1, -1, int.max);
+      else 
+	bestMoves[i] = move(-1, -1, -1, -1, int.min);
+    }
+    int alpha = int.min;
+    int beta = int.max;
+    ulong castle1, castle2;
+    if (isBlack){
+      castle1 = 432345564227567616uL;
+      castle2 = 8070450532247928832uL;
+    }
+    else {
+      castle1 = 6uL;
+      castle2 = 112uL;
+    }
+    if (castle[isBlack][0]){
+      if (((occupied[0] | occupied[1]) & castle1) == 0){
+	makeCastle(isBlack, false);
+	castle[isBlack][0] = false;
+	int score = -nega(-beta, -alpha, depth-1, !isBlack);
+	unmakeCastle(isBlack, false);
+	castle[isBlack][0] = true;
+        if (score > alpha){
+	  alpha = score;
+	}
+	if (isBlack){
+	  insertMove(move(59, 56, 5, 6, score), isBlack);
+	}
+	else {
+	  insertMove(move(3, 0, 5, 6, score), isBlack);
+	}
+      }
+    }
+    if (castle[isBlack][1]){
+      if (((occupied[0] | occupied[1]) & castle2) == 0){
+	makeCastle(isBlack, true);
+	castle[isBlack][1] = false;
+	int score = -nega(-beta, -alpha, depth-1, !isBlack);
+	unmakeCastle(isBlack, true);
+	castle[isBlack][1] = true;
+        if (score > alpha){
+	  alpha = score;
+	}
+	if (isBlack){
+	  insertMove(move(59, 63, 5, 6, score), isBlack);
+	}
+	else {
+	  insertMove(move(3, 7, 5, 6, score), isBlack);
+	}
+      }
+    }
+  }
   
 
   int maxi (int alpha, int beta, int depth){
-    // assert_state();
+    assert_state();
     if (depth == 0) return evaluation;
   
     moveSet [16] moves = genMoves(false);
@@ -674,25 +862,25 @@ struct Chess_state {
     int kidx;
     for (kidx = 0; moves[kidx].pieceType != 5; kidx ++){
       if ((moves[kidx].set & kingPos) != 0){
-	return int.max - 1;
+	return int.max - 51;
       }
     }
     if ((moves[kidx].set & kingPos) != 0){
-      return int.max - 1;
+      return int.max - 51;
     }
     kidx ++;
     int pidx;
-    for (pidx = 0; moves[pidx].pieceType == 1; pidx ++){}
-    mixin(makeKillFunctions(4, true, false, false));
-    mixin(makeKillFunctions(3, true, false, false));
-    mixin(makeKillFunctions(2, true, false, false));
-    mixin(makeKillFunctions(1, true, false, false));
-    mixin(makeKillFunctions(0, true, false, false));
-    mixin(makeKillFunctions(4, false, false, false));
-    mixin(makeKillFunctions(3, false, false, false));
-    mixin(makeKillFunctions(2, false, false, false));
-    mixin(makeKillFunctions(1, false, false, false));
-    mixin(makeKillFunctions(0, false, false, false));
+    for (pidx = 0; moves[pidx].pieceType == 0; pidx ++){}
+    mixin(makeKillFunctions(4, true, false, false, false));
+    mixin(makeKillFunctions(3, true, false, false, false));
+    mixin(makeKillFunctions(2, true, false, false, false));
+    mixin(makeKillFunctions(1, true, false, false, false));
+    mixin(makeKillFunctions(0, true, false, false, false));
+    mixin(makeKillFunctions(4, false, false, false, false));
+    mixin(makeKillFunctions(3, false, false, false, false));
+    mixin(makeKillFunctions(2, false, false, false, false));
+    mixin(makeKillFunctions(1, false, false, false, false));
+    mixin(makeKillFunctions(0, false, false, false, false));
    
     ulong tolOccupied = occupied[1] | occupied[0];
     for (int i = 0; i < kidx; i ++){
@@ -719,32 +907,32 @@ struct Chess_state {
   }
 
   int mini (int alpha, int beta, int depth){
-    // assert_state();
-    if (depth == 0) return  evaluation;
+    assert_state();
+    if (depth == 0) return evaluation;
     moveSet [16] moves = genMoves(true);
     ulong kingPos = pieces[0][5];
     int kidx;
     for (kidx = 0; moves[kidx].pieceType != 5; kidx ++){
       if ((moves[kidx].set & kingPos) != 0){
-	return int.min + 1;
+	return int.min + +51;
       }
     }
     if ((moves[kidx].set & kingPos) != 0){
-      return int.min + 1;
+      return int.min + +51;
     }
     kidx ++;
     int pidx;
-    for (pidx = 0; moves[pidx].pieceType == 1; pidx ++){}
-    mixin(makeKillFunctions(4, true, true, false));
-    mixin(makeKillFunctions(3, true, true, false));
-    mixin(makeKillFunctions(2, true, true, false));
-    mixin(makeKillFunctions(1, true, true, false));
-    mixin(makeKillFunctions(0, true, true, false));
-    mixin(makeKillFunctions(4, false, true, false));
-    mixin(makeKillFunctions(3, false, true, false));
-    mixin(makeKillFunctions(2, false, true, false));
-    mixin(makeKillFunctions(1, false, true, false));
-    mixin(makeKillFunctions(0, false, true, false));
+    for (pidx = 0; moves[pidx].pieceType == 0; pidx ++){}
+    mixin(makeKillFunctions(4, true, true, false, false));
+    mixin(makeKillFunctions(3, true, true, false, false));
+    mixin(makeKillFunctions(2, true, true, false, false));
+    mixin(makeKillFunctions(1, true, true, false, false));
+    mixin(makeKillFunctions(0, true, true, false, false));
+    mixin(makeKillFunctions(4, false, true, false, false));
+    mixin(makeKillFunctions(3, false, true, false, false));
+    mixin(makeKillFunctions(2, false, true, false, false));
+    mixin(makeKillFunctions(1, false, true, false, false));
+    mixin(makeKillFunctions(0, false, true, false, false));
     
     ulong tolOccupied = occupied[1] | occupied[0];
     for (int i = 0; i < kidx; i ++){
@@ -770,8 +958,66 @@ struct Chess_state {
     return beta;
   }
 
+  // int qsmini (int alpha, int beta){
+  //   if (evaluation > beta) return evaluation;
+  //   moveSet [16] moves = genMoves(true);
+  //   ulong kingPos = pieces[0][5];
+  //   int kidx;
+  //   for (kidx = 0; moves[kidx].pieceType != 5; kidx ++){
+  //     if ((moves[kidx].set & kingPos) != 0){
+  // 	return int.min + 1;
+  //     }
+  //   }
+  //   if ((moves[kidx].set & kingPos) != 0){
+  //     return int.min + 1;
+  //   }
+  //   kidx ++;
+  //   int pidx;
+  //   for (pidx = 0; moves[pidx].pieceType == 1; pidx ++){}
+  //   mixin(makeKillFunctions(4, true, true, false, true));
+  //   mixin(makeKillFunctions(3, true, true, false, true));
+  //   mixin(makeKillFunctions(2, true, true, false, true));
+  //   mixin(makeKillFunctions(1, true, true, false, true));
+  //   mixin(makeKillFunctions(0, true, true, false, true));
+  //   mixin(makeKillFunctions(4, false, true, false, true));
+  //   mixin(makeKillFunctions(3, false, true, false, true));
+  //   mixin(makeKillFunctions(2, false, true, false, true));
+  //   mixin(makeKillFunctions(1, false, true, false, true));
+  //   mixin(makeKillFunctions(0, false, true, false, true));
+  //   return beta;
+  // }
+  
+  // int qsmaxi (int alpha, int beta){
+  //   if (evaluation < alpha) return evaluation;
+  //   moveSet [16] moves = genMoves(false);
+  //   ulong kingPos = pieces[1][5];
+  //   int kidx;
+  //   for (kidx = 0; moves[kidx].pieceType != 5; kidx ++){
+  //     if ((moves[kidx].set & kingPos) != 0){
+  // 	return int.max - 1;
+  //     }
+  //   }
+  //   if ((moves[kidx].set & kingPos) != 0){
+  //     return int.max - 1;
+  //   }
+  //   kidx ++;
+  //   int pidx;
+  //   for (pidx = 0; moves[pidx].pieceType == 1; pidx ++){}
+  //   mixin(makeKillFunctions(4, true, false, false, true));
+  //   mixin(makeKillFunctions(3, true, false, false, true));
+  //   mixin(makeKillFunctions(2, true, false, false, true));
+  //   mixin(makeKillFunctions(1, true, false, false, true));
+  //   mixin(makeKillFunctions(0, true, false, false, true));
+  //   mixin(makeKillFunctions(4, false, false, false, true));
+  //   mixin(makeKillFunctions(3, false, false, false, true));
+  //   mixin(makeKillFunctions(2, false, false, false, true));
+  //   mixin(makeKillFunctions(1, false, false, false, true));
+  //   mixin(makeKillFunctions(0, false, false, false, true));
+  //   return alpha;
+  // }
+
   void minimax (int depth, bool isBlack){
-    // assert_state();
+    assert_state();
     for (int i = 0; i < firstSaveSize; i ++){
       if (isBlack)
 	bestMoves[i] = move(-1, -1, -1, -1, int.max);
@@ -796,17 +1042,23 @@ struct Chess_state {
 	int score = mini(alpha, beta, depth-1);
 	unmakeCastle(isBlack, false);
 	castle[isBlack][0] = true;
-	if ( isBlack && score < beta) {
-	  beta = score;
-	}
-	else if (!isBlack && score > alpha){
-	  alpha = score;
-	}
 	if (isBlack){
 	  insertMove(move(59, 56, 5, 6, score), isBlack);
 	}
 	else {
 	  insertMove(move(3, 0, 5, 6, score), isBlack);
+	}
+	if ( isBlack) {
+	  if (score < beta){
+	    beta = score;
+	  }
+	  if (score <= alpha) return;
+	}
+	else {
+	  if (score > alpha){
+	    alpha = score;
+	  }
+	  if (score >= beta) return;
 	}
       }
     }
@@ -817,17 +1069,23 @@ struct Chess_state {
 	int score = mini(alpha, beta, depth-1);
 	unmakeCastle(isBlack, true);
 	castle[isBlack][1] = true;
-	if ( isBlack && score < beta) {
-	  beta = score;
-	}
-	else if (!isBlack && score > alpha){
-	  alpha = score;
-	}
-	if (isBlack){
+        if (isBlack){
 	  insertMove(move(59, 63, 5, 6, score), isBlack);
 	}
 	else {
 	  insertMove(move(3, 7, 5, 6, score), isBlack);
+	}
+	if ( isBlack) {
+	  if (score < beta){
+	    beta = score;
+	  }
+	  if (score <= alpha) return;
+	}
+	else {
+	  if (score > alpha){
+	    alpha = score;
+	  }
+	  if (score >= beta) return;
 	}
       }
     }
@@ -837,31 +1095,32 @@ struct Chess_state {
     for (kidx = 0; moves[kidx].pieceType != 5; kidx ++){ }
     kidx ++;
     int pidx;
-    for (pidx = 0; moves[pidx].pieceType == 1; pidx ++){}
+    for (pidx = 0; moves[pidx].pieceType == 0; pidx ++){}
     if (isBlack){
-      mixin(makeKillFunctions(4, true, true, true));
-      mixin(makeKillFunctions(3, true, true, true));
-      mixin(makeKillFunctions(2, true, true, true));
-      mixin(makeKillFunctions(1, true, true, true));
-      mixin(makeKillFunctions(0, true, true, true));
-      mixin(makeKillFunctions(4, false, true, true));
-      mixin(makeKillFunctions(3, false, true, true));
-      mixin(makeKillFunctions(2, false, true, true));
-      mixin(makeKillFunctions(1, false, true, true));
-      mixin(makeKillFunctions(0, false, true, true));
+      mixin(makeKillFunctions(4, true, true, true, false));
+      mixin(makeKillFunctions(3, true, true, true, false));
+      mixin(makeKillFunctions(2, true, true, true, false));
+      mixin(makeKillFunctions(1, true, true, true, false));
+      mixin(makeKillFunctions(0, true, true, true, false));
+      mixin(makeKillFunctions(4, false, true, true, false));
+      mixin(makeKillFunctions(3, false, true, true, false));
+      mixin(makeKillFunctions(2, false, true, true, false));
+      mixin(makeKillFunctions(1, false, true, true, false));
+      mixin(makeKillFunctions(0, false, true, true, false));
     }
     else {
-      mixin(makeKillFunctions(4, true, false, true));
-      mixin(makeKillFunctions(3, true, false, true));
-      mixin(makeKillFunctions(2, true, false, true));
-      mixin(makeKillFunctions(1, true, false, true));
-      mixin(makeKillFunctions(0, true, false, true));
-      mixin(makeKillFunctions(4, false, false, true));
-      mixin(makeKillFunctions(3, false, false, true));
-      mixin(makeKillFunctions(2, false, false, true));
-      mixin(makeKillFunctions(1, false, false, true));
-      mixin(makeKillFunctions(0, false, false, true));
+      mixin(makeKillFunctions(4, true, false, true, false));
+      mixin(makeKillFunctions(3, true, false, true, false));
+      mixin(makeKillFunctions(2, true, false, true, false));
+      mixin(makeKillFunctions(1, true, false, true, false));
+      mixin(makeKillFunctions(0, true, false, true, false));
+      mixin(makeKillFunctions(4, false, false, true, false));
+      mixin(makeKillFunctions(3, false, false, true, false));
+      mixin(makeKillFunctions(2, false, false, true, false));
+      mixin(makeKillFunctions(1, false, false, true, false));
+      mixin(makeKillFunctions(0, false, false, true, false));
     }
+    
     ulong tolOccupied = occupied[1] | occupied[0];
     for (int i = 0; i < kidx; i ++){
       for (ulong b = moves[i].set & ~tolOccupied; b!= 0; b &= (b-1)){
@@ -883,7 +1142,22 @@ struct Chess_state {
 	    score = mini(alpha, beta, depth-1);
 	  unmakeQuietMove(isBlack, moves[i].pieceType, moves[i].piecePos, sq);
 	}
-	insertMove(move(moves[i].piecePos, sq, moves[i].pieceType, 6, score /*+ castlePenalty(move(moves[i].piecePos, sq, moves[i].pieceType, 6, score), isBlack)*/), isBlack);
+	insertMove(move(moves[i].piecePos, sq, moves[i].pieceType, 6, score
+			+ castlePenalty(move(moves[i].piecePos, sq, moves[i].pieceType, 6, score), isBlack)
+			), isBlack);
+
+	if (isBlack){
+	  if (score <= alpha) return;
+	  if (score < beta) {
+	    beta = score;
+	  }
+	}
+	else {
+	  if (score >= beta) return;
+	  if (score > alpha) {
+	    alpha = score;
+	  }
+	}
       }
     }
   }
