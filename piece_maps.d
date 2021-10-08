@@ -8,6 +8,10 @@ ulong [64][64] arrBehind;
 
 ulong [64][2] pawnAttacks; //second is isBlack
 
+ulong [64][6][2] randomPieceNums;
+ulong [16] randomCastleFlags;
+ulong isBlackTurn;
+
 void processPositions (){
   //pawn
   positionEval[1][0] = [800,800,800,800,800,800,800,800,
@@ -104,6 +108,19 @@ void printBoard (ulong board){
 }
 
 void preProcess (){
+  
+  import std.random;
+  auto rnd = Random(69);
+  for (int i = 0; i < 6; i ++){
+    for (int j = 0; j < 64; j ++){
+      randomPieceNums[0][i][j] = uniform(ulong.min, ulong.max, rnd);
+      randomPieceNums[1][i][j] = uniform(ulong.min, ulong.max, rnd);
+    }
+  }
+  isBlackTurn = uniform(ulong.min, ulong.max, rnd);
+  for (int i = 0; i < 16; i ++){
+    randomCastleFlags[i] = uniform(ulong.min, ulong.max, rnd);
+  }
   processPositions();
   for (int i = 0; i < 64; i ++){
     pawnAttacks[0][i] = 0;
