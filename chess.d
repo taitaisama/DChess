@@ -2,12 +2,18 @@
 
 import std.stdio;
 import piece_maps.d;
+import core.thread.osthread: Thread;
 
 extern (C) int ffsl(long a);
 
-const int firstSaveSize = 5;
-const int seconSaveSize = 5;
+// const int firstSaveSize = 5;
+// const int seconSaveSize = 5;
+const auto cutoff = msecs(3000);
 
+__gshared bool timeExceeded;
+
+import std.datetime.systime : SysTime, Clock;
+import core.time : msecs, usecs, hnsecs, nsecs;
 struct MoveSet {
   int pieceType;
   ulong set;
@@ -39,7 +45,6 @@ struct Move {
 
 int numStates = 0;
 
-data [ulong] transpositionTable;
 
 struct data {
   Move move;
@@ -50,7 +55,7 @@ struct data {
   }
 }
 
-struct Chess_state {
+struct Chess_state  {
   
   int currDepth;
   Move bestMove;
@@ -60,6 +65,10 @@ struct Chess_state {
   int castle; 
   int evaluation;
   ulong hash;
+  bool turnIsBlack;
+  
+  data [ulong] transpositionTable;
+
 
   // Move [firstSaveSize] bestMoves; //best 5, worst to best
 
@@ -78,7 +87,7 @@ struct Chess_state {
   //   }
   // }
   
-  this (bool a){
+  this (){
     castle = 15; //0 for none, +1 for white left, +2 for white right, +4 for black left, +8 for black right
     for (int i = 0; i < 16; i ++){
       occupied[0] |= (1uL << i);
@@ -751,6 +760,9 @@ struct Chess_state {
     hash ^= isBlackTurn;
     // assert_state(1, isBlack);
     import std.math;
+    if (timeExceeded){
+      return alpha;
+    }
     Move bestMove = Move(-1, -1, -1, -1, -1);
     if (hash in transpositionTable){
       data d = transpositionTable[hash];
@@ -1261,18 +1273,45 @@ struct Chess_state {
 	}
       }
     }
+    if (timeExceeded){
+      assert(transpositionTable[hash].depth == currDepth-1);
+      return transpositionTable[hash].move;
+    }
     transpositionTable[hash] = data(bestMove, depth);
     return bestMove;
   }
-  Move iterative (bool isBlack){
-    currDepth = 6;
-    negaDriver(isBlack);
-    currDepth = 7;
-    return negaDriver(isBlack);
+  
+  Move genBestMove (bool isBlack){
+    currDepth = 5;
+    hash ^= isBlackTurn;
+    while (true){
+      hash ^= isBlackTurn;
+      bestMove = negaDriver(isBlack);
+      currDepth ++;
+      synchronized{
+      	if (timeExceeded){
+      	  break;
+      	}
+      }
+    }
+    return bestMove;
   }
 }
 
-
+class Timer : Thread {
+  this (){
+    super (&run);
+  }
+  
+private:
+  void run(){
+    SysTime startTime = Clock.currTime();
+    while (Clock.currTime() - startTime < cutoff) { }
+    synchronized{
+      timeExceeded = true;
+    }
+  }
+} 
 
 void printMoves (MoveSet [16] moves){
   for (int i = 0;  moves[i].pieceType != 5; i ++){
@@ -1281,21 +1320,36 @@ void printMoves (MoveSet [16] moves){
   }
 }
 
-Chess_state state = Chess_state(true);
+Chess_state state;
+Timer cutoffTimer;
+
+Move getMove (bool isBlack){
+  state.turnIsBlack = isBlack;
+  synchronized{
+    timeExceeded = false;
+  }
+  cutoffTimer = new Timer();
+  cutoffTimer.start();
+  return state.genBestMove(isBlack);
+  // state.currDepth = 7;
+  // state.bestMove = state.negaDriver(isBlack);
+  // writeln(state.transpositionTable.length);
+  // writeln(state.hash);
+  // return (state.bestMove);
+}
 
 void main (){
-  
+  state = new Chess_state();
   preProcess();
   state.setHash();
-  import std.datetime.systime : SysTime, Clock;
   state.print();
   for  (int i = 0; i < 100; i ++){
     SysTime start = Clock.currTime();
-    state.makeMove(state.iterative(false), false);
+    state.makeMove(getMove(false), false);
     SysTime end = Clock.currTime();
     writeln(end-start);
     state.print();
-    state.makeMove(state.iterative(true), true);
+    state.makeMove(getMove(true), true);
     SysTime end2 = Clock.currTime();
     writeln(end2-end);
     state.print();
