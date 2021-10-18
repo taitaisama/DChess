@@ -1,0 +1,12 @@
+{
+	"authors": [
+		"Ramanuj"
+	],
+	"copyright": "Copyright © 2021, Ramanuj",
+	"dependencies": {
+		"gtk-d": "~>3.9.0"
+	},
+	"description": "A chess program in D",
+	"license": "proprietary",
+	"name": "chess"
+}
