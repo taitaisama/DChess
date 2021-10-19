@@ -10,7 +10,7 @@ ulong [64][2] pawnAttacks; //second is isBlack
 
 ulong [64][6][2] randomPieceNums;
 ulong [16] randomCastleFlags;
-ulong isBlackTurn;
+ulong randomTurnNum;
 
 void processPositions (){
   //pawn
@@ -117,7 +117,7 @@ void preProcess (){
       randomPieceNums[1][i][j] = uniform(ulong.min, ulong.max, rnd);
     }
   }
-  isBlackTurn = uniform(ulong.min, ulong.max, rnd);
+  randomTurnNum = uniform(ulong.min, ulong.max, rnd);
   for (int i = 0; i < 16; i ++){
     randomCastleFlags[i] = uniform(ulong.min, ulong.max, rnd);
   }

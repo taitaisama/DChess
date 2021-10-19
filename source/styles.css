@@ -1,0 +1,25 @@
+#windowColor {
+    background-color: #212121;
+}
+#buttonColor {
+    background-image: image(#2c2c2c);
+    color: white;
+}
+#buttonColor:hover {
+    background-color: black;
+}
+#labelColor {
+    background-color: #212121;
+    color: white;
+}
+/* #posButtonLight { */
+/*     background-image: image(#a6a6a6); */
+/*     color: black; */
+/*     font-size: 80px; */
+/* } */
+
+/* #posButtonDark { */
+/*     background-image: image(#ffffff); */
+/*     color: black; */
+/*     font-size: 80px; */
+/* } */

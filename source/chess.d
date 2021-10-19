@@ -9,31 +9,6 @@ int ffslminusone (long a){
   return ffsl(a) - 1;
 }
 
-// int prevSelected;
-
-// extern (C++) ulong inputMove (int position, bool isBlack){
-//   if (prevSelected == -1){
-//     prevSelected = position;
-//     ulong occ = state.occupied[0] | state.occupied[1];
-//     for (int i = 0; i < 6; i ++){
-//       if ((state.pieces[isBlack][i] >> position) % 2 == 1){
-// 	return (pieceMove(occ, i, position) & (~occupied[isBlack]));
-//       }
-//     }
-//     return 0;
-//   }
-//   else {
-//     state.makeMove(prevSelected, position);
-//     prevSelected = -1;
-//     Move best = state.getMove(!isBlack);
-//     state.makeMove(best, !isBlack);
-//     return state.occupied[isBlack];
-//   }
-// }
-
-// extern (C++) ulong * getPieces (){
-//   return state.pieces;
-// }
 
 __gshared bool timeExceeded;
 __gshared bool flipBoard = false;
@@ -90,7 +65,7 @@ struct Chess_state  {
   int castle; 
   int evaluation;
   ulong hash;
-  bool turnIsBlack;
+  bool isBlackTurn;
   
 
   void reset(){
@@ -116,52 +91,7 @@ struct Chess_state  {
     pieces[1][5] = 576460752303423488uL;
     enPasant = 0uL;
     hash = 10249543995982554652uL;
-    // for (int i = 0; i < 16; i ++){
-    //   occupied[0] |= (1uL << i);
-    // }
-    // for (int i = 8; i < 16; i ++){
-    //   pieces[0][0] |= (1uL << i);
-    // }
-    // pieces[0][1] |= (1uL << 1);
-    // pieces[0][1] |= (1uL << 6);
-    // pieces[0][2] |= (1uL << 2);
-    // pieces[0][2] |= (1uL << 5);
-    // pieces[0][3] |= (1uL << 0);
-    // pieces[0][3] |= (1uL << 7);
-    // pieces[0][5] |= (1uL << 3);
-    // pieces[0][4] |= (1uL << 4);
-    
-    // for (int i = 48; i < 64; i ++){
-    //   occupied[1] |= (1uL << i);
-    // }
-    // for (int i = 48; i < 56; i ++){
-    //   pieces[1][0] |= (1uL << i);
-    // }
-    // pieces[1][1] |= (1uL << 57);
-    // pieces[1][1] |= (1uL << 62);
-    // pieces[1][2] |= (1uL << 58);
-    // pieces[1][2] |= (1uL << 61);
-    // pieces[1][3] |= (1uL << 56);
-    // pieces[1][3] |= (1uL << 63);
-    // pieces[1][5] |= (1uL << 59);
-    // pieces[1][4] |= (1uL << 60);
   }
-  // Move [firstSaveSize] bestMoves; //best 5, worst to best
-
-  // void insertMove (Move m){
-  //   if (bestMoves[0].score < m.score){
-  //     bestMoves[0] = m;
-  //   }
-  //   else {
-  //     return;
-  //   }
-    
-  //   for (int i = 1; i < firstSaveSize && bestMoves[i].score < bestMoves[i-1].score; i ++){
-  //     Move temp = bestMoves[i];
-  //     bestMoves[i] = bestMoves[i-1];
-  //     bestMoves[i-1] = temp;
-  //   }
-  // }
   
   this (bool lol){
     reset();
@@ -179,8 +109,8 @@ struct Chess_state  {
       }
     }
     hash ^= randomCastleFlags[castle];
-    if (turnIsBlack){
-      hash ^= isBlackTurn;
+    if (isBlackTurn){
+      hash ^= randomTurnNum;
     }
   }
   void setEval (){
@@ -197,12 +127,12 @@ struct Chess_state  {
     }
   }
 
-  this (ulong [6][2] p, int c, int en, bool isBlack){
+  this (ulong [6][2] p, int c, int en, bool b){
     pieces = p;
     castle = c;
     if (en != 0)
       enPasant = (1uL << en);
-    turnIsBlack = isBlack;
+    isBlackTurn = b;
     setHash();
     setEval();
   }
@@ -257,10 +187,8 @@ struct Chess_state  {
 	}
 	if (flag){
 	  b ~= "\u2003\u2009";
-	  // write("  ");
 	}
 	if (i % 8 == 7 && i != 63){
-	  // writeln();
 	  b ~= "\n\u2004";
 	}
       }
@@ -358,7 +286,7 @@ struct Chess_state  {
     return n;
   }
 
-  void assert_state(int num, bool isBlack){
+  void assert_state(int num){
     assert_castle();
     assert((pieces[0][5] & (pieces[0][5]-1)) == 0);
     assert((pieces[1][5] & (pieces[1][5]-1)) == 0);
@@ -409,8 +337,8 @@ struct Chess_state  {
 	hashEval ^= randomPieceNums[1][i][sq];
       }
     }
-    if (isBlack){
-      hashEval ^= isBlackTurn;
+    if (isBlackTurn){
+      hashEval ^= randomTurnNum;
     }
     hashEval ^= randomCastleFlags[castle];
     hashEval ^= enPasant;
@@ -428,9 +356,9 @@ struct Chess_state  {
     return attacks;
   }
   
-  ulong pawnMoves (ulong totalOccupied, int pos, bool isBlack){
+  ulong pawnMoves (ulong totalOccupied, int pos){
     ulong attacks = 0;
-    if (isBlack){
+    if (isBlackTurn){
       attacks = (1uL << (pos-8))&(~totalOccupied);
       if (pos/8 == 6 && attacks != 0){
 	attacks |= (1uL << (pos-16))&(~totalOccupied);
@@ -442,7 +370,7 @@ struct Chess_state  {
 	attacks |= (1uL << (pos+16))&(~totalOccupied);
       }
     }
-    attacks |= pawnAttacks[isBlack][pos]&((occupied[(!isBlack)]) | enPasant);
+    attacks |= pawnAttacks[isBlackTurn][pos]&((occupied[(!isBlackTurn)]) | enPasant);
     return attacks;
   }
 
@@ -466,12 +394,12 @@ struct Chess_state  {
     }
   }
 
-  void makeEnPasant (bool isBlack, int initialPos, int finalPos){
+  void makeEnPasant (int initialPos, int finalPos){
     ulong a = (1uL << initialPos)|(1uL << finalPos);
-    pieces[isBlack][0] ^= a;
-    occupied[isBlack] ^= a;
+    pieces[isBlackTurn][0] ^= a;
+    occupied[isBlackTurn] ^= a;
     ulong b;
-    if (isBlack){
+    if (isBlackTurn){
       b = (1uL << (finalPos+8));
       evaluation -= positionEval[1][0][finalPos] - positionEval[1][0][initialPos] + positionEval[0][0][finalPos+8];
       hash ^= randomPieceNums[1][0][finalPos] ^ randomPieceNums[1][0][initialPos] ^ randomPieceNums[0][0][finalPos+8];
@@ -481,17 +409,19 @@ struct Chess_state  {
       evaluation += positionEval[0][0][finalPos] - positionEval[0][0][initialPos] + positionEval[1][0][finalPos-8];
       hash ^= randomPieceNums[0][0][finalPos] ^ randomPieceNums[0][0][initialPos] ^ randomPieceNums[1][0][finalPos-8];
     }
-    occupied[!(isBlack)] ^= b;
-    pieces[!(isBlack)][0] ^= b;
-    hash ^= isBlackTurn;
+    occupied[!(isBlackTurn)] ^= b;
+    pieces[!(isBlackTurn)][0] ^= b;
+    isBlackTurn = !isBlackTurn;
+    hash ^= randomTurnNum;
   }
 
-  void unmakeEnPasant (bool isBlack, int initialPos, int finalPos){
+  void unmakeEnPasant (int initialPos, int finalPos){
     ulong a = (1uL << initialPos)|(1uL << finalPos);
-    pieces[isBlack][0] ^= a;
-    occupied[isBlack] ^= a;
+    isBlackTurn = !isBlackTurn;
+    pieces[isBlackTurn][0] ^= a;
+    occupied[isBlackTurn] ^= a;
     ulong b;
-    if (isBlack){
+    if (isBlackTurn){
       b = (1uL << (finalPos+8));
       evaluation += positionEval[1][0][finalPos] - positionEval[1][0][initialPos] + positionEval[0][0][finalPos+8];
     }
@@ -499,14 +429,14 @@ struct Chess_state  {
       b = (1uL << (finalPos-8));
       evaluation -= positionEval[0][0][finalPos] - positionEval[0][0][initialPos] + positionEval[1][0][finalPos-8];
     }
-    occupied[!(isBlack)] ^= b;
-    pieces[!(isBlack)][0] ^= b;
+    occupied[!(isBlackTurn)] ^= b;
+    pieces[!(isBlackTurn)][0] ^= b;
   }
 
-  void makeCastle (bool isBlack, bool isRight){
+  void makeCastle (bool isRight){
     hash ^= enPasant;
     enPasant = 0uL;
-    if (isBlack){
+    if (isBlackTurn){
       if (isRight){
 	ulong a = (1uL << 57)|(1uL << 59);
 	ulong b = (1uL << 56)|(1uL << 58);
@@ -546,11 +476,13 @@ struct Chess_state  {
 	hash ^= randomPieceNums[0][5][5] ^ randomPieceNums[0][5][3] ^ randomPieceNums[0][3][4] ^ randomPieceNums[0][3][7];
       }
     }
-    hash ^= isBlackTurn;
+    isBlackTurn = !isBlackTurn;
+    hash ^= randomTurnNum;
   }
   
-  void unmakeCastle (bool isBlack, bool isRight){
-    if (isBlack){
+  void unmakeCastle (bool isRight){
+    isBlackTurn = !isBlackTurn;
+    if (isBlackTurn){
       if (isRight){
 	ulong a = (1uL << 57)|(1uL << 59);
 	ulong b = (1uL << 56)|(1uL << 58);
@@ -588,55 +520,57 @@ struct Chess_state  {
     }
   }
 
-  void makePawnPromotion (bool isBlack, int killType, int initialPos, int finalPos){
+  void makePawnPromotion (int killType, int initialPos, int finalPos){
     hash ^= enPasant;
     enPasant = 0uL;
     ulong inpos = (1uL << initialPos);
     ulong fipos = (1uL << finalPos);
-    pieces[isBlack][0] ^= inpos;
-    pieces[isBlack][4] ^= fipos;
-    occupied[isBlack] ^= (inpos | fipos);
+    pieces[isBlackTurn][0] ^= inpos;
+    pieces[isBlackTurn][4] ^= fipos;
+    occupied[isBlackTurn] ^= (inpos | fipos);
     int evalChange = 0;
-    evalChange += positionEval[isBlack][4][finalPos] - positionEval[isBlack][0][initialPos];
-    hash ^= randomPieceNums[isBlack][4][finalPos] ^ randomPieceNums[isBlack][0][initialPos];
+    evalChange += positionEval[isBlackTurn][4][finalPos] - positionEval[isBlackTurn][0][initialPos];
+    hash ^= randomPieceNums[isBlackTurn][4][finalPos] ^ randomPieceNums[isBlackTurn][0][initialPos];
     if (killType < 6){
-      pieces[(!isBlack)][killType] ^= fipos;
-      occupied[(!isBlack)] ^= fipos;
-      evalChange += positionEval[(!isBlack)][killType][finalPos];
-      hash ^= randomPieceNums[(!isBlack)][killType][finalPos];
+      pieces[(!isBlackTurn)][killType] ^= fipos;
+      occupied[(!isBlackTurn)] ^= fipos;
+      evalChange += positionEval[(!isBlackTurn)][killType][finalPos];
+      hash ^= randomPieceNums[(!isBlackTurn)][killType][finalPos];
     }
-    if (isBlack) evaluation -= evalChange;
+    if (isBlackTurn) evaluation -= evalChange;
     else evaluation += evalChange;
-    hash ^= isBlackTurn;
+    isBlackTurn = !isBlackTurn;
+    hash ^= randomTurnNum;
   }
   
-  void unmakePawnPromotion (bool isBlack, int killType, int initialPos, int finalPos){
+  void unmakePawnPromotion (int killType, int initialPos, int finalPos){
+    isBlackTurn = !isBlackTurn;
     ulong inpos = (1uL << initialPos);
     ulong fipos = (1uL << finalPos);
-    pieces[isBlack][0] ^= inpos;
-    pieces[isBlack][4] ^= fipos;
-    occupied[isBlack] ^= (inpos | fipos);
-    int evalChange = positionEval[isBlack][4][finalPos] - positionEval[isBlack][0][initialPos];
+    pieces[isBlackTurn][0] ^= inpos;
+    pieces[isBlackTurn][4] ^= fipos;
+    occupied[isBlackTurn] ^= (inpos | fipos);
+    int evalChange = positionEval[isBlackTurn][4][finalPos] - positionEval[isBlackTurn][0][initialPos];
     if (killType < 6){
-      pieces[(!isBlack)][killType] ^= fipos;
-      occupied[(!isBlack)] ^= fipos;
-      evalChange += positionEval[(!isBlack)][killType][finalPos];
+      pieces[(!isBlackTurn)][killType] ^= fipos;
+      occupied[(!isBlackTurn)] ^= fipos;
+      evalChange += positionEval[(!isBlackTurn)][killType][finalPos];
     }
-    if (isBlack) evaluation += evalChange;
+    if (isBlackTurn) evaluation += evalChange;
     else evaluation -= evalChange;
   }
 
-  void makeQuietMove (bool isBlack, int type, int initialPos, int finalPos){
+  void makeQuietMove (int type, int initialPos, int finalPos){
     import std.math;
     hash ^= enPasant;
     enPasant = 0uL;
     if (type == 0 && abs(initialPos - finalPos) != 8){
       if (abs(initialPos - finalPos) != 16){
-	makeEnPasant(isBlack, initialPos, finalPos);
+	makeEnPasant(initialPos, finalPos);
 	return;
       }
       else {
-	if (isBlack){
+	if (isBlackTurn){
 	  enPasant = (1uL << (initialPos - 8));
 	}
 	else {
@@ -646,76 +580,81 @@ struct Chess_state  {
       }
     }
     ulong change = (1uL << initialPos)|(1uL << finalPos);
-    pieces[isBlack][type] ^= change;
-    occupied[isBlack] ^= change;
-    int evalChange = positionEval[isBlack][type][finalPos] - positionEval[isBlack][type][initialPos];
-    hash ^= randomPieceNums[isBlack][type][finalPos] ^ randomPieceNums[isBlack][type][initialPos];
-    if (isBlack) evaluation -= evalChange;
+    pieces[isBlackTurn][type] ^= change;
+    occupied[isBlackTurn] ^= change;
+    int evalChange = positionEval[isBlackTurn][type][finalPos] - positionEval[isBlackTurn][type][initialPos];
+    hash ^= randomPieceNums[isBlackTurn][type][finalPos] ^ randomPieceNums[isBlackTurn][type][initialPos];
+    if (isBlackTurn) evaluation -= evalChange;
     else evaluation += evalChange;
-    hash ^= isBlackTurn;
+    isBlackTurn = !isBlackTurn;
+    hash ^= randomTurnNum;
   }
 
-  void unmakeQuietMove (bool isBlack, int type, int initialPos, int finalPos){
+  void unmakeQuietMove (int type, int initialPos, int finalPos){
+    isBlackTurn = !isBlackTurn;
     import std.math;
     if (type == 0 && abs(initialPos - finalPos) != 8){
       if (abs(initialPos - finalPos) != 16){
-	unmakeEnPasant(isBlack, initialPos, finalPos);
+	isBlackTurn = !isBlackTurn;
+	unmakeEnPasant(initialPos, finalPos);
 	return;
       }
     }
     ulong change = (1uL << initialPos)|(1uL << finalPos);
-    pieces[isBlack][type] ^= change;
-    occupied[isBlack] ^= change;
-    int evalChange = positionEval[isBlack][type][finalPos] - positionEval[isBlack][type][initialPos];
-    if (isBlack) evaluation += evalChange;
+    pieces[isBlackTurn][type] ^= change;
+    occupied[isBlackTurn] ^= change;
+    int evalChange = positionEval[isBlackTurn][type][finalPos] - positionEval[isBlackTurn][type][initialPos];
+    if (isBlackTurn) evaluation += evalChange;
     else evaluation -= evalChange;
   }
   
-  void makeKillMove (bool isBlack, int playType, int killType, int initialPos, int finalPos){
+  void makeKillMove (int playType, int killType, int initialPos, int finalPos){
     hash ^= enPasant;
     enPasant = 0uL;
     ulong fipos = 1uL << finalPos;
     ulong change = (1uL << initialPos) | fipos;
-    pieces[isBlack][playType] ^= change;
-    occupied[isBlack] ^= change;
-    occupied[(!isBlack)] ^= fipos;
-    pieces[(!isBlack)][killType] ^= fipos;
-    int evalChange = positionEval[isBlack][playType][finalPos] - positionEval[isBlack][playType][initialPos] + positionEval[(!isBlack)][killType][finalPos];
-    hash ^= randomPieceNums[isBlack][playType][finalPos] ^ randomPieceNums[isBlack][playType][initialPos] ^ randomPieceNums[(!isBlack)][killType][finalPos];
-    if (isBlack) evaluation -= evalChange;
+    pieces[isBlackTurn][playType] ^= change;
+    occupied[isBlackTurn] ^= change;
+    occupied[(!isBlackTurn)] ^= fipos;
+    pieces[(!isBlackTurn)][killType] ^= fipos;
+    int evalChange = positionEval[isBlackTurn][playType][finalPos] - positionEval[isBlackTurn][playType][initialPos] + positionEval[(!isBlackTurn)][killType][finalPos];
+    hash ^= randomPieceNums[isBlackTurn][playType][finalPos] ^ randomPieceNums[isBlackTurn][playType][initialPos] ^ randomPieceNums[(!isBlackTurn)][killType][finalPos];
+    if (isBlackTurn) evaluation -= evalChange;
     else evaluation += evalChange;
-    hash ^= isBlackTurn;
+    isBlackTurn = !isBlackTurn;
+    hash ^= randomTurnNum;
   }
 
-  void unmakeKillMove (bool isBlack, int playType, int killType, int initialPos, int finalPos){
+  void unmakeKillMove (int playType, int killType, int initialPos, int finalPos){
+    isBlackTurn = !isBlackTurn;
     ulong fipos = 1uL << finalPos;
     ulong change = (1uL << initialPos) | fipos;
-    pieces[isBlack][playType] ^= change;
-    occupied[isBlack] ^= change;
-    occupied[(!isBlack)] ^= fipos;
-    pieces[(!isBlack)][killType] ^= fipos;
-    int evalChange = positionEval[isBlack][playType][finalPos] - positionEval[isBlack][playType][initialPos] + positionEval[(!isBlack)][killType][finalPos];
-    if (isBlack) evaluation += evalChange;
+    pieces[isBlackTurn][playType] ^= change;
+    occupied[isBlackTurn] ^= change;
+    occupied[(!isBlackTurn)] ^= fipos;
+    pieces[(!isBlackTurn)][killType] ^= fipos;
+    int evalChange = positionEval[isBlackTurn][playType][finalPos] - positionEval[isBlackTurn][playType][initialPos] + positionEval[(!isBlackTurn)][killType][finalPos];
+    if (isBlackTurn) evaluation += evalChange;
     else evaluation -= evalChange;
   }
 
-  bool squareIsUnderAttack (int sq, bool isBlack, ulong tolOccupied){
+  bool squareIsUnderAttack (int sq, bool isBlackTurn, ulong tolOccupied){
     ulong pos = (1uL << sq);
-    return (pieceAttacks[1][sq] & pieces[isBlack][1]) != 0 || //attacked by knight
-      (pawnAttacks[(!isBlack)][sq] & pieces[isBlack][0]) != 0 || //attacked by pawn WRONG
-      (pieceMoves(tolOccupied, 3, sq) & (pieces[isBlack][3] | pieces[isBlack][4])) != 0 || //attacked by rook or queen
-      (pieceMoves(tolOccupied, 2, sq) & (pieces[isBlack][2] | pieces[isBlack][4])) != 0 || //attacked by bishop or queen
-      (pieceMoves(tolOccupied, 5, sq) & pieces[isBlack][5]) != 0; //attacked by king
+    return (pieceAttacks[1][sq] & pieces[isBlackTurn][1]) != 0 || //attacked by knight
+      (pawnAttacks[(!isBlackTurn)][sq] & pieces[isBlackTurn][0]) != 0 || //attacked by pawn WRONG
+      (pieceMoves(tolOccupied, 3, sq) & (pieces[isBlackTurn][3] | pieces[isBlackTurn][4])) != 0 || //attacked by rook or queen
+      (pieceMoves(tolOccupied, 2, sq) & (pieces[isBlackTurn][2] | pieces[isBlackTurn][4])) != 0 || //attacked by bishop or queen
+      (pieceMoves(tolOccupied, 5, sq) & pieces[isBlackTurn][5]) != 0; //attacked by king
   }
   
 
-  bool squareIsUnderAttack2 (ulong pos, bool isBlack, ulong tolOccupied){
+  bool squareIsUnderAttack2 (ulong pos, bool isBlackTurn, ulong tolOccupied){
     int sq = ffslminusone(pos);
-    return (pieceAttacks[1][sq] & pieces[isBlack][1]) != 0 || //attacked by knight
-      (pawnAttacks[(!isBlack)][sq] & pieces[isBlack][0]) != 0 || //attacked by pawn WRONG
-      (pieceMoves(tolOccupied, 3, sq) & (pieces[isBlack][3] | pieces[isBlack][4])) != 0 || //attacked by rook or queen
-      (pieceMoves(tolOccupied, 2, sq) & (pieces[isBlack][2] | pieces[isBlack][4])) != 0 || //attacked by bishop or queen
-      (pieceMoves(tolOccupied, 5, sq) & pieces[isBlack][5]) != 0; //attacked by king
+    return (pieceAttacks[1][sq] & pieces[isBlackTurn][1]) != 0 || //attacked by knight
+      (pawnAttacks[(!isBlackTurn)][sq] & pieces[isBlackTurn][0]) != 0 || //attacked by pawn WRONG
+      (pieceMoves(tolOccupied, 3, sq) & (pieces[isBlackTurn][3] | pieces[isBlackTurn][4])) != 0 || //attacked by rook or queen
+      (pieceMoves(tolOccupied, 2, sq) & (pieces[isBlackTurn][2] | pieces[isBlackTurn][4])) != 0 || //attacked by bishop or queen
+      (pieceMoves(tolOccupied, 5, sq) & pieces[isBlackTurn][5]) != 0; //attacked by king
   }
 
   void makeMove(int initialPos, int finalPos){
@@ -726,11 +665,11 @@ struct Chess_state  {
 	if ((pieces[0][i] & inPos) != 0){
 	  for (int j = 0; j < 6; j ++){
 	    if ((pieces[1][j] & fiPos) != 0){
-	      makeMove(Move(initialPos, finalPos, i, j, 0), false);
+	      makeMove(Move(initialPos, finalPos, i, j, 0));
 	      return;
 	    }
 	  }
-	  makeMove(Move(initialPos, finalPos, i, 6, 0), false);
+	  makeMove(Move(initialPos, finalPos, i, 6, 0));
 	  return;
 	}
       }
@@ -740,11 +679,11 @@ struct Chess_state  {
 	if ((pieces[1][i] & inPos) != 0){
 	  for (int j = 0; j < 6; j ++){
 	    if ((pieces[0][j] & fiPos) != 0){
-	      makeMove(Move(initialPos, finalPos, i, j, 0), true);
+	      makeMove(Move(initialPos, finalPos, i, j, 0));
 	      return;
 	    }
 	  }
-	  makeMove(Move(initialPos, finalPos, i, 6, 0), true);
+	  makeMove(Move(initialPos, finalPos, i, 6, 0));
 	  return;
 	}
       }
@@ -752,25 +691,24 @@ struct Chess_state  {
     assert(false, "invalid move");
   }
   
-  void makeMove(Move m, bool isBlack){
+  void makeMove(Move m){
     import std.math;
     if (m.playType == 5 && (abs(m.initialPos - m.finalPos) == 2)){
-      // writeln(m.initialPos, " " , m.finalPos, " " , m.playType);
       hash ^= randomCastleFlags[castle];
-      if (isBlack){
+      if (isBlackTurn){
 	castle &= 3;
       }
       else {
 	castle &= 12;
       }
       hash ^= randomCastleFlags[castle];
-      if (isBlack){
+      if (isBlackTurn){
 	assert (m.initialPos == 59);
 	if (m.finalPos == 57){
-	  makeCastle(true, true);
+	  makeCastle(true);
 	}
 	else if (m.finalPos == 61){
-	  makeCastle(true, false);
+	  makeCastle(false);
 	}
 	else {
 	  assert(false);
@@ -779,10 +717,10 @@ struct Chess_state  {
       else {
 	assert (m.initialPos == 3);
 	if (m.finalPos == 1){
-	  makeCastle(false, true);
+	  makeCastle(true);
 	}
 	else if (m.finalPos == 5){
-	  makeCastle(false, false);
+	  makeCastle(false);
 	}
 	else {
 	  assert(false);
@@ -790,21 +728,15 @@ struct Chess_state  {
       }
       return;
     }
-    if (m.playType == 0 && ((m.finalPos >= 56 && (!isBlack)) || (m.finalPos <= 7 && (isBlack)))){
-      makePawnPromotion(isBlack, m.killType, m.initialPos, m.finalPos);
-      return;
-    }
-    if (m.killType == 6) makeQuietMove(isBlack, m.playType, m.initialPos, m.finalPos);
-    else makeKillMove(isBlack, m.playType, m.killType, m.initialPos, m.finalPos);
-    hash ^= randomCastleFlags[castle];
     if (m.playType == 5){
-      if (isBlack){
+      if (isBlackTurn){
 	castle &= 3;
       }
       else {
 	castle &= 12;
       }
     }
+    hash ^= randomCastleFlags[castle];
     if (m.initialPos == 0 || m.finalPos == 0){
       castle &= (13);
     }
@@ -818,37 +750,43 @@ struct Chess_state  {
       castle &= (11);
     }
     hash ^= randomCastleFlags[castle];
+    if (m.playType == 0 && ((m.finalPos >= 56 && (!isBlackTurn)) || (m.finalPos <= 7 && (isBlackTurn)))){
+      makePawnPromotion(m.killType, m.initialPos, m.finalPos);
+      return;
+    }
+    if (m.killType == 6) makeQuietMove(m.playType, m.initialPos, m.finalPos);
+    else makeKillMove(m.playType, m.killType, m.initialPos, m.finalPos);
   }
-  int quiesce (int alpha, int beta, bool isBlack){ //Do I really care about hash?
-    int stand_pat = evaluate(isBlack);
+  int quiesce (int alpha, int beta){ //Do I really care about hash?
+    int stand_pat = evaluate();
     if (stand_pat >= beta){
       return beta;
     }
     if (stand_pat > alpha){
       alpha = stand_pat;
     }
-    MoveSet [16] moves = genMoves(isBlack);
+    MoveSet [16] moves = genMoves();
     int lastIdx = 1;
     for (; moves[lastIdx-1].pieceType != 5; lastIdx++){}
     for (int movePieceIdx = 0; movePieceIdx < lastIdx; movePieceIdx ++){
-      if ((moves[movePieceIdx].set & pieces[(!isBlack)][5]) != 0) {
+      if ((moves[movePieceIdx].set & pieces[(!isBlackTurn)][5]) != 0) {
 	return 5000;
       }
     }
     for (int killPiece = 4; killPiece >= 0; killPiece --){
       for (int movePieceIdx = 0; movePieceIdx < lastIdx; movePieceIdx ++){
-	for (ulong b = moves[movePieceIdx].set & pieces[(!isBlack)][killPiece]; b != 0; b &= (b-1)){
+	for (ulong b = moves[movePieceIdx].set & pieces[(!isBlackTurn)][killPiece]; b != 0; b &= (b-1)){
 	  int sq = ffslminusone(b);
 	  int score;
 	  if (moves[movePieceIdx].pieceType == 0 && (sq <= 7 || sq >= 56)){
-	    makePawnPromotion(isBlack, killPiece, moves[movePieceIdx].piecePos, sq);
-	    score = -quiesce( -beta, -alpha, (!isBlack));
-	    unmakePawnPromotion(isBlack, killPiece, moves[movePieceIdx].piecePos, sq);
+	    makePawnPromotion(killPiece, moves[movePieceIdx].piecePos, sq);
+	    score = -quiesce( -beta, -alpha);
+	    unmakePawnPromotion( killPiece, moves[movePieceIdx].piecePos, sq);
 	  }
 	  else {
-	    makeKillMove(isBlack, moves[movePieceIdx].pieceType, killPiece, moves[movePieceIdx].piecePos, sq);
-	    score = -quiesce( -beta, -alpha, (!isBlack));
-	    unmakeKillMove(isBlack, moves[movePieceIdx].pieceType, killPiece, moves[movePieceIdx].piecePos, sq);
+	    makeKillMove(moves[movePieceIdx].pieceType, killPiece, moves[movePieceIdx].piecePos, sq);
+	    score = -quiesce( -beta, -alpha);
+	    unmakeKillMove(moves[movePieceIdx].pieceType, killPiece, moves[movePieceIdx].piecePos, sq);
 	  }
 	  if( score >= beta ) return beta;   
 	  if( score > alpha ) alpha = score;
@@ -857,11 +795,11 @@ struct Chess_state  {
     }
     return alpha;
   }
-  int evaluate(bool isBlack){
-    if (isBlack) return -evaluation;
+  int evaluate(){
+    if (isBlackTurn) return -evaluation;
     else return evaluation;
   }
-  void changeCastle (bool isBlack, int moveType, int finalsquare, int initialsquare){
+  void changeCastle (int moveType, int finalsquare, int initialsquare){
     hash ^= randomCastleFlags[castle];
     if (finalsquare == 0 || initialsquare == 0){
       castle &= 13;
@@ -876,7 +814,7 @@ struct Chess_state  {
       castle &= 11;
     }
     if (moveType == 5){
-      if (isBlack){
+      if (isBlackTurn){
 	castle &= 3;
       }
       else {
@@ -886,17 +824,17 @@ struct Chess_state  {
     hash ^= randomCastleFlags[castle];
   }
   
-  MoveSet [16] genMoves (bool isBlack){
+  MoveSet [16] genMoves (){
     MoveSet [16] moves;
     //each piece one by one
     int idx = 0;
     ulong occupied = occupied[0] | occupied[1];
-    for (ulong b = pieces[isBlack][0]; b != 0; b &= (b-1), idx ++){
+    for (ulong b = pieces[isBlackTurn][0]; b != 0; b &= (b-1), idx ++){
       int sq = ffslminusone(b);
-      moves[idx] = MoveSet(0, pawnMoves(occupied, sq, isBlack), sq);
+      moves[idx] = MoveSet(0, pawnMoves(occupied, sq), sq);
     }
     for (int j = 1; j < 6; j ++){
-      for (ulong b = pieces[isBlack][j]; b != 0; b &= (b-1), idx ++){
+      for (ulong b = pieces[isBlackTurn][j]; b != 0; b &= (b-1), idx ++){
 	int sq = ffslminusone(b);
 	moves[idx] = MoveSet(j, pieceMoves(occupied, j, sq), sq);
       }
@@ -904,10 +842,10 @@ struct Chess_state  {
     return moves;
   }
 
-  bool isCastlePossible (bool isBlack, bool isRight){
-    bool isWhite = !isBlack;
+  bool isCastlePossible (bool isRight){
+    bool isWhite = !isBlackTurn;
     ulong tolOccupied = occupied[1] | occupied[0];
-    if (isBlack){
+    if (isBlackTurn){
       if (isRight){
 	return !(squareIsUnderAttack(59, isWhite, tolOccupied) || squareIsUnderAttack(58, isWhite, tolOccupied) || squareIsUnderAttack(57, isWhite, tolOccupied));
       }
@@ -926,8 +864,8 @@ struct Chess_state  {
   }
 
   
-  int negamax (int alpha, int beta, int depth, bool isBlack){
-    // print(currDepth - depth);
+  int negamax (int alpha, int beta, int depth){
+    // assert_state(1);
     int maxScore = -5000;
     import std.math;
     if (timeExceeded){
@@ -937,11 +875,6 @@ struct Chess_state  {
     if (hash in transpositionTable){
       data d = transpositionTable[hash];
       if (d.depth >= depth){
-    	// for (int i = 0; i < currDepth - depth; i ++){
-    	//   write("    ");
-    	// }
-    	// writeln("hash found, returned with score ", d.move.score);
-    	// writeln(d.depth, " ", depth);
     	return d.move.score;
       }
       else {
@@ -955,30 +888,30 @@ struct Chess_state  {
     	  case 1:
     	    castle &= 12;
     	    hash ^= randomCastleFlags[castle];
-    	    makeCastle(false, true);
-    	    score = -negamax( -beta, -alpha, depth-1, (!isBlack));
-    	    unmakeCastle(false, true);
+    	    makeCastle(true);
+    	    score = -negamax( -beta, -alpha, depth-1);
+    	    unmakeCastle(true);
     	    break;
     	  case 5:
     	    castle &= 12;
     	    hash ^= randomCastleFlags[castle];
-    	    makeCastle(false, false);
-    	    score = -negamax( -beta, -alpha, depth-1, (!isBlack));
-    	    unmakeCastle(false, false);
+    	    makeCastle(false);
+    	    score = -negamax( -beta, -alpha, depth-1);
+    	    unmakeCastle(false);
     	    break;
     	  case 57:
     	    castle &= 3;
     	    hash ^= randomCastleFlags[castle];
-    	    makeCastle(true, true);
-    	    score = -negamax( -beta, -alpha, depth-1, (!isBlack));
-    	    unmakeCastle(true, true);
+    	    makeCastle(true);
+    	    score = -negamax( -beta, -alpha, depth-1);
+    	    unmakeCastle(true);
     	    break;
     	  case 61:
     	    castle &= 3;
     	    hash ^= randomCastleFlags[castle];
-    	    makeCastle(true, false);
-    	    score = -negamax( -beta, -alpha, depth-1, (!isBlack));
-    	    unmakeCastle(true, false);
+    	    makeCastle(false);
+    	    score = -negamax( -beta, -alpha, depth-1);
+    	    unmakeCastle(false);
     	    break;
     	  default:
     	    assert(false);
@@ -990,12 +923,6 @@ struct Chess_state  {
 	    maxScore = score;
 	  }
     	  if( score >= beta ) {
-    	    // d.move.score = score;
-    	    // transpositionTable[hash] = data(d.move, depth);
-    	    // for (int i = 0; i < currDepth - depth; i ++){
-    	    //   write("    ");
-    	    // }
-    	    // writeln("hash castle beta cutoff, score is ", score, "beta is ", beta);
     	    return beta;
     	  }  
     	  if( score > alpha ) {
@@ -1008,22 +935,22 @@ struct Chess_state  {
     	  ulong initHash = hash;
 	  ulong initEnPasant = enPasant;
     	  int score;
-    	  changeCastle(isBlack, d.move.playType, d.move.finalPos, d.move.initialPos);
+    	  changeCastle( d.move.playType, d.move.finalPos, d.move.initialPos);
     	  if (d.move.playType == 0 && (d.move.finalPos >= 56 || d.move.finalPos <= 7)){
-    	      makePawnPromotion(isBlack, d.move.killType, d.move.initialPos, d.move.finalPos);
-    	      score = -negamax( -beta, -alpha, depth-1, (!isBlack));
-    	      unmakePawnPromotion(isBlack, d.move.killType, d.move.initialPos, d.move.finalPos);
+    	      makePawnPromotion(d.move.killType, d.move.initialPos, d.move.finalPos);
+    	      score = -negamax( -beta, -alpha, depth-1);
+    	      unmakePawnPromotion(d.move.killType, d.move.initialPos, d.move.finalPos);
     	  }
     	  else {
     	    if (d.move.killType == 6){
-    	      makeQuietMove(isBlack, d.move.playType, d.move.initialPos, d.move.finalPos);
-    	      score = -negamax( -beta, -alpha, depth-1, (!isBlack));
-    	      unmakeQuietMove(isBlack, d.move.playType, d.move.initialPos, d.move.finalPos);
+    	      makeQuietMove(d.move.playType, d.move.initialPos, d.move.finalPos);
+    	      score = -negamax( -beta, -alpha, depth-1);
+    	      unmakeQuietMove(d.move.playType, d.move.initialPos, d.move.finalPos);
     	    }
     	    else {
-    	      makeKillMove(isBlack, d.move.playType, d.move.killType, d.move.initialPos, d.move.finalPos);
-    	      score = -negamax( -beta, -alpha, depth-1, (!isBlack));
-    	      unmakeKillMove(isBlack, d.move.playType, d.move.killType, d.move.initialPos, d.move.finalPos);
+    	      makeKillMove(d.move.playType, d.move.killType, d.move.initialPos, d.move.finalPos);
+    	      score = -negamax( -beta, -alpha, depth-1);
+    	      unmakeKillMove(d.move.playType, d.move.killType, d.move.initialPos, d.move.finalPos);
     	    }
     	  }
     	  castle = initCastle;
@@ -1033,12 +960,6 @@ struct Chess_state  {
 	    maxScore = score;
 	  }
     	  if( score >= beta ) {
-    	    // d.move.score = score;
-    	    // transpositionTable[hash] = data(d.move, depth);
-    	    // for (int i = 0; i < currDepth - depth; i ++){
-    	    //   write("    ");
-    	    // }
-    	    // writeln("hash beta cutoff, score is ", score, "beta is ", beta);
     	    return beta;
     	  }   
     	  if( score > alpha ) {
@@ -1051,42 +972,33 @@ struct Chess_state  {
     ulong initHash = hash;
     ulong initEnPasant = enPasant;
     if (depth == 0) {
-      // for (int i = 0; i < currDepth - depth; i ++){
-      // 	write("    ");
-      // }
-      // writeln("quiesce return ", quiesce(alpha, beta, isBlack));
-      return quiesce(alpha, beta, isBlack);
+      return quiesce(alpha, beta);
     }
     hash = initHash;
     enPasant = initEnPasant;
     ulong totalOccupied = occupied[0] | occupied[1];
-    if (squareIsUnderAttack2(pieces[(!isBlack)][5], isBlack, totalOccupied)) return 5000;
-    MoveSet [16] moves = genMoves(isBlack);
+    if (squareIsUnderAttack2(pieces[(!isBlackTurn)][5], isBlackTurn, totalOccupied)) return 5000;
+    MoveSet [16] moves = genMoves();
     int lastIdx = 1;
     for (; moves[lastIdx-1].pieceType != 5; lastIdx++){}
-    // for (int movePieceIdx = 0; movePieceIdx < lastIdx; movePieceIdx ++){
-    //   if ((moves[movePieceIdx].set & pieces[(!isBlack)][5]) != 0) {
-    //     return 5000;
-    //   }
-    // }
     for (int killPiece = 4; killPiece >= 0; killPiece --){
       for (int movePieceIdx = 0; movePieceIdx < lastIdx; movePieceIdx ++){
-	for (ulong b = moves[movePieceIdx].set & pieces[(!isBlack)][killPiece]; b != 0; b &= (b-1)){
+	for (ulong b = moves[movePieceIdx].set & pieces[(!isBlackTurn)][killPiece]; b != 0; b &= (b-1)){
 	  int sq = ffslminusone(b);
 	  int initCastle = castle;
 	  initHash = hash;
 	  initEnPasant = enPasant;
-	  changeCastle(isBlack, moves[movePieceIdx].pieceType, sq, moves[movePieceIdx].piecePos);
+	  changeCastle(moves[movePieceIdx].pieceType, sq, moves[movePieceIdx].piecePos);
 	  int score;
 	  if (moves[movePieceIdx].pieceType == 0 && (sq <= 7 || sq >= 56)){
-	    makePawnPromotion(isBlack, killPiece, moves[movePieceIdx].piecePos, sq);
-	    score = -negamax( -beta, -alpha, depth-1, (!isBlack));
-	    unmakePawnPromotion(isBlack, killPiece, moves[movePieceIdx].piecePos, sq);
+	    makePawnPromotion(killPiece, moves[movePieceIdx].piecePos, sq);
+	    score = -negamax( -beta, -alpha, depth-1);
+	    unmakePawnPromotion(killPiece, moves[movePieceIdx].piecePos, sq);
 	  }
 	  else {
-	    makeKillMove(isBlack, moves[movePieceIdx].pieceType, killPiece, moves[movePieceIdx].piecePos, sq);
-	    score = -negamax( -beta, -alpha, depth-1, (!isBlack));
-	    unmakeKillMove(isBlack, moves[movePieceIdx].pieceType, killPiece, moves[movePieceIdx].piecePos, sq);
+	    makeKillMove(moves[movePieceIdx].pieceType, killPiece, moves[movePieceIdx].piecePos, sq);
+	    score = -negamax( -beta, -alpha, depth-1);
+	    unmakeKillMove(moves[movePieceIdx].pieceType, killPiece, moves[movePieceIdx].piecePos, sq);
 	  }
 	  castle = initCastle;
 	  enPasant = initEnPasant;
@@ -1095,11 +1007,6 @@ struct Chess_state  {
 	    maxScore = score;
 	  }
 	  if( score >= beta ) {
-	    // transpositionTable[hash] = data(Move(moves[movePieceIdx].piecePos, sq, moves[movePieceIdx].pieceType, killPiece, score), depth);
-	    // for (int i = 0; i < currDepth - depth; i ++){
-	    //   write("    ");
-	    // }
-	    // writeln("kill move beta cutoff, score is ", score, "beta is ", beta);
 	    return beta;
 	  }   
 	  if( score > alpha ) {
@@ -1110,7 +1017,7 @@ struct Chess_state  {
       }
     }
     ulong castleRight, castleLeft;
-    if (isBlack){
+    if (isBlackTurn){
       castleRight = 432345564227567616uL;
       castleLeft = 8070450532247928832uL;
     }
@@ -1118,21 +1025,21 @@ struct Chess_state  {
       castleRight = 6uL;
       castleLeft = 112uL;
     }
-    if (((((castle & 1) != 0) && (!isBlack)) || (((castle & 4) != 0) && isBlack))  && (totalOccupied & castleLeft) == 0 && isCastlePossible(isBlack, false)){
+    if (((((castle & 1) != 0) && (!isBlackTurn)) || (((castle & 4) != 0) && isBlackTurn))  && (totalOccupied & castleLeft) == 0 && isCastlePossible(false)){
       int initCastle = castle;
       initHash = hash;
       initEnPasant = enPasant;
       hash ^= randomCastleFlags[castle];
-      if (isBlack){
+      if (isBlackTurn){
 	castle &= 3;
       }
       else {
 	castle &= 12;
       }
       hash ^= randomCastleFlags[castle];
-      makeCastle(isBlack, false);
-      int score = -negamax( -beta, -alpha, depth-1, (!isBlack));
-      unmakeCastle(isBlack, false);
+      makeCastle(false);
+      int score = -negamax( -beta, -alpha, depth-1);
+      unmakeCastle(false);
       hash = initHash;
       castle = initCastle;
       enPasant = initEnPasant;
@@ -1140,39 +1047,31 @@ struct Chess_state  {
 	maxScore = score;
       }
       if( score >= beta ) {
-	// if (isBlack)
-	//   transpositionTable[hash] = data(Move(59, 61, 5, 6, score) , depth);
-	// else
-	//   transpositionTable[hash] = data(Move(3, 5, 5, 6, score) , depth);
-	// for (int i = 0; i < currDepth - depth; i ++){
-	//   write("    ");
-	// }
-	// writeln("left castle beta cutoff, score is ", score, " beta is ", beta);
 	return beta;
       }   
       if( score > alpha ) {
 	alpha = score;
-	if (isBlack)
+	if (isBlackTurn)
 	  bestMove = Move(59, 61, 5, 6, score);
 	else
 	  bestMove = Move(3, 5, 5, 6, score);
       }
     }
-    if (((((castle & 2) != 0) && (!isBlack)) || (((castle & 8) != 0) && isBlack)) && (totalOccupied & castleRight) == 0 && isCastlePossible(isBlack, true)){
+    if (((((castle & 2) != 0) && (!isBlackTurn)) || (((castle & 8) != 0) && isBlackTurn)) && (totalOccupied & castleRight) == 0 && isCastlePossible(true)){
       int initCastle = castle;
       initHash = hash;
       initEnPasant = enPasant;
       hash ^= randomCastleFlags[castle];
-      if (isBlack){
+      if (isBlackTurn){
 	castle &= 3;
       }
       else {
 	castle &= 12;
       }
       hash ^= randomCastleFlags[castle];
-      makeCastle(isBlack, true);
-      int score = -negamax( -beta, -alpha, depth-1, (!isBlack));
-      unmakeCastle(isBlack, true);
+      makeCastle(true);
+      int score = -negamax( -beta, -alpha, depth-1);
+      unmakeCastle(true);
       hash = initHash;
       castle = initCastle;
       enPasant = initEnPasant;
@@ -1180,19 +1079,11 @@ struct Chess_state  {
 	maxScore = score;
       }
       if( score >= beta ) {
-	// if (isBlack)
-	//   transpositionTable[hash] = data(Move(59, 57, 5, 6, score) , depth);
-	// else
-	//   transpositionTable[hash] = data(Move(3, 1, 5, 6, score) , depth);
-	// for (int i = 0; i < currDepth - depth; i ++){
-	//   write("    ");
-	// }
-	// writeln("right castle beta cutoff, score is ", score, " beta is ", beta);
 	return beta;
       }   
       if( score > alpha ) {
 	alpha = score;
-	if (isBlack)
+	if (isBlackTurn)
 	  bestMove = Move(59, 57, 5, 6, score);
 	else
 	  bestMove = Move(3, 1, 5, 6, score);
@@ -1205,17 +1096,17 @@ struct Chess_state  {
         int initCastle = castle;
         initHash = hash;
         initEnPasant = enPasant;
-	changeCastle(isBlack, moves[movePieceIdx].pieceType, sq, moves[movePieceIdx].piecePos);
+	changeCastle(moves[movePieceIdx].pieceType, sq, moves[movePieceIdx].piecePos);
 	int score;
 	if (moves[movePieceIdx].pieceType == 0 && (sq <= 7 || sq >= 56)){
-	  makePawnPromotion(isBlack, 6, moves[movePieceIdx].piecePos, sq);
-	  score = -negamax( -beta, -alpha, depth-1, (!isBlack));
-	  unmakePawnPromotion(isBlack, 6, moves[movePieceIdx].piecePos, sq);
+	  makePawnPromotion( 6, moves[movePieceIdx].piecePos, sq);
+	  score = -negamax( -beta, -alpha, depth-1);
+	  unmakePawnPromotion(6, moves[movePieceIdx].piecePos, sq);
 	}
 	else {
-	  makeQuietMove(isBlack, moves[movePieceIdx].pieceType, moves[movePieceIdx].piecePos, sq);
-	  score = -negamax( -beta, -alpha, depth-1, (!isBlack));
-	  unmakeQuietMove(isBlack, moves[movePieceIdx].pieceType, moves[movePieceIdx].piecePos, sq);
+	  makeQuietMove(moves[movePieceIdx].pieceType, moves[movePieceIdx].piecePos, sq);
+	  score = -negamax( -beta, -alpha, depth-1);
+	  unmakeQuietMove(moves[movePieceIdx].pieceType, moves[movePieceIdx].piecePos, sq);
 	}
 	castle = initCastle;
 	hash = initHash;
@@ -1224,11 +1115,6 @@ struct Chess_state  {
 	  maxScore = score;
 	}
 	if( score >= beta ) {
-	  // transpositionTable[hash] = data(Move(moves[movePieceIdx].piecePos, sq, moves[movePieceIdx].pieceType, 6, score) , depth);
-	  // for (int i = 0; i < currDepth - depth; i ++){
-	  //   write("    ");
-	  // }
-	  // writeln("quite beta cutoff, score is ", score, " beta is ", beta);
 	  return beta;
 	}   
 	if( score > alpha ) {
@@ -1241,18 +1127,14 @@ struct Chess_state  {
       bestMove.score = alpha;
       transpositionTable[hash] = data(bestMove, depth);
     }
-    if (maxScore == -5000 && !squareIsUnderAttack2(pieces[isBlack][5], !isBlack, totalOccupied)){
+    if (maxScore == -5000 && !squareIsUnderAttack2(pieces[isBlackTurn][5], !isBlackTurn, totalOccupied)){
       return 0;
     }
-    // writeln(alpha);
-    // for (int i = 0; i < currDepth - depth; i ++){
-    //   write("    ");
-    // }
-    // writeln("alpha return, alpha is ", alpha );
     return alpha;
   }
 
-  Move negaDriver (bool isBlack){
+  Move negaDriver (){
+    // assert_state(2);
     Move bestMove;
     int alpha = -10000;
     int beta = 10000;
@@ -1261,7 +1143,7 @@ struct Chess_state  {
     if (hash in transpositionTable){
       data d = transpositionTable[hash];
       if (d.depth >= depth){
-	if (!checkIfRepetition(d.move, isBlack)){
+	if (!checkIfRepetition(d.move)){
 	  return d.move;
 	}
       }
@@ -1276,30 +1158,30 @@ struct Chess_state  {
     	  case 1:
     	    castle &= 12;
     	    hash ^= randomCastleFlags[castle];
-    	    makeCastle(false, true);
-    	    score = -negamax( -beta, -alpha, depth-1, (!isBlack));
-    	    unmakeCastle(false, true);
+    	    makeCastle(true);
+    	    score = -negamax( -beta, -alpha, depth-1);
+    	    unmakeCastle(true);
     	    break;
     	  case 5:
     	    castle &= 12;
     	    hash ^= randomCastleFlags[castle];
-    	    makeCastle(false, false);
-    	    score = -negamax( -beta, -alpha, depth-1, (!isBlack));
-    	    unmakeCastle(false, false);
+    	    makeCastle(false);
+    	    score = -negamax( -beta, -alpha, depth-1);
+    	    unmakeCastle(false);
     	    break;
     	  case 57:
     	    castle &= 3;
     	    hash ^= randomCastleFlags[castle];
-    	    makeCastle(true, true);
-    	    score = -negamax( -beta, -alpha, depth-1, (!isBlack));
-    	    unmakeCastle(true, true);
+    	    makeCastle(true);
+    	    score = -negamax( -beta, -alpha, depth-1);
+    	    unmakeCastle(true);
     	    break;
     	  case 61:
     	    castle &= 3;
     	    hash ^= randomCastleFlags[castle];
-    	    makeCastle(true, false);
-    	    score = -negamax( -beta, -alpha, depth-1, (!isBlack));
-    	    unmakeCastle(true, false);
+    	    makeCastle(false);
+    	    score = -negamax( -beta, -alpha, depth-1);
+    	    unmakeCastle(false);
     	    break;
     	  default:
     	    assert(false);
@@ -1317,29 +1199,29 @@ struct Chess_state  {
     	  ulong initHash = hash;
 	  ulong initEnPasant = enPasant;
     	  int score;
-    	  changeCastle(isBlack, d.move.playType, d.move.finalPos, d.move.initialPos);
+    	  changeCastle(d.move.playType, d.move.finalPos, d.move.initialPos);
     	  if (d.move.playType == 0 && (d.move.finalPos >= 56 || d.move.finalPos <= 7)){
-    	    makePawnPromotion(isBlack, d.move.killType, d.move.initialPos, d.move.finalPos);
-    	    score = -negamax( -beta, -alpha, depth-1, (!isBlack));
-    	    unmakePawnPromotion(isBlack, d.move.killType, d.move.initialPos, d.move.finalPos);
+    	    makePawnPromotion(d.move.killType, d.move.initialPos, d.move.finalPos);
+    	    score = -negamax( -beta, -alpha, depth-1);
+    	    unmakePawnPromotion(d.move.killType, d.move.initialPos, d.move.finalPos);
     	  }
     	  else {
     	    if (d.move.killType == 6){
-    	      makeQuietMove(isBlack, d.move.playType, d.move.initialPos, d.move.finalPos);
-    	      score = -negamax( -beta, -alpha, depth-1, (!isBlack));
-    	      unmakeQuietMove(isBlack, d.move.playType, d.move.initialPos, d.move.finalPos);
+    	      makeQuietMove(d.move.playType, d.move.initialPos, d.move.finalPos);
+    	      score = -negamax( -beta, -alpha, depth-1);
+    	      unmakeQuietMove(d.move.playType, d.move.initialPos, d.move.finalPos);
     	    }
     	    else {
-    	      makeKillMove(isBlack, d.move.playType, d.move.killType, d.move.initialPos, d.move.finalPos);
-    	      score = -negamax( -beta, -alpha, depth-1, (!isBlack));
-    	      unmakeKillMove(isBlack, d.move.playType, d.move.killType, d.move.initialPos, d.move.finalPos);
+    	      makeKillMove(d.move.playType, d.move.killType, d.move.initialPos, d.move.finalPos);
+    	      score = -negamax( -beta, -alpha, depth-1);
+    	      unmakeKillMove(d.move.playType, d.move.killType, d.move.initialPos, d.move.finalPos);
     	    }
     	  }
     	  castle = initCastle;
     	  hash = initHash;
 	  enPasant = initEnPasant;
     	  if( score > alpha ) {
-	    if (checkIfRepetition(d.move, isBlack)){
+	    if (checkIfRepetition(d.move)){
 	      score = 0;
 	      if (score > alpha){
 		alpha = score;
@@ -1355,37 +1237,27 @@ struct Chess_state  {
     	}
       }
     }
-    MoveSet [16] moves = genMoves(isBlack);
+    MoveSet [16] moves = genMoves();
     int lastIdx = 1;
     for (; moves[lastIdx-1].pieceType != 5; lastIdx++){}
-    // for (int i = 0; i < firstSaveSize; i ++){
-    //   bestMoves[i] = Move(-1, -1, -1, -1, int.min);
-    // }
-    // for (int movePieceIdx = 0; movePieceIdx < lastIdx; movePieceIdx ++){
-    //   if ((moves[movePieceIdx].set & pieces[(!isBlack)][5]) != 0) {
-    // 	assert(false);
-    //   }
-    // }
     for (int killPiece = 4; killPiece >= 0; killPiece --){
       for (int movePieceIdx = 0; movePieceIdx < lastIdx; movePieceIdx ++){
-	for (ulong b = moves[movePieceIdx].set & pieces[(!isBlack)][killPiece]; b != 0; b &= (b-1)){
+	for (ulong b = moves[movePieceIdx].set & pieces[(!isBlackTurn)][killPiece]; b != 0; b &= (b-1)){
 	  int sq = ffslminusone(b);
 	  int initCastle = castle;
 	  ulong initHash = hash;
 	  ulong initEnPasant = enPasant;
-	  changeCastle(isBlack, moves[movePieceIdx].pieceType, sq, moves[movePieceIdx].piecePos);
+	  changeCastle(moves[movePieceIdx].pieceType, sq, moves[movePieceIdx].piecePos);
 	  int score;
 	  if (moves[movePieceIdx].pieceType == 0 && (sq <= 7 || sq >= 56)){
-	    makePawnPromotion(isBlack, killPiece, moves[movePieceIdx].piecePos, sq);
-	    score = -negamax( -beta, -alpha, depth-1, (!isBlack));
-	    unmakePawnPromotion(isBlack, killPiece, moves[movePieceIdx].piecePos, sq);
-	    // insertMove(Move(moves[movePieceIdx].piecePos, sq, 0, killPiece, score));
+	    makePawnPromotion(killPiece, moves[movePieceIdx].piecePos, sq);
+	    score = -negamax( -beta, -alpha, depth-1);
+	    unmakePawnPromotion(killPiece, moves[movePieceIdx].piecePos, sq);
 	  }
 	  else {
-	    makeKillMove(isBlack, moves[movePieceIdx].pieceType, killPiece, moves[movePieceIdx].piecePos, sq);
-	    score = -negamax( -beta, -alpha, depth-1, (!isBlack));
-	    unmakeKillMove(isBlack, moves[movePieceIdx].pieceType, killPiece, moves[movePieceIdx].piecePos, sq);
-	    // insertMove(Move(moves[movePieceIdx].piecePos, sq, moves[movePieceIdx].pieceType, killPiece, score));
+	    makeKillMove(moves[movePieceIdx].pieceType, killPiece, moves[movePieceIdx].piecePos, sq);
+	    score = -negamax( -beta, -alpha, depth-1);
+	    unmakeKillMove(moves[movePieceIdx].pieceType, killPiece, moves[movePieceIdx].piecePos, sq);
 	  }
 	  castle = initCastle;
 	  hash = initHash;
@@ -1400,7 +1272,7 @@ struct Chess_state  {
     }
     ulong totalOccupied = occupied[0] | occupied[1];
     ulong castleRight, castleLeft;
-    if (isBlack){
+    if (isBlackTurn){
       castleRight = 432345564227567616uL;
       castleLeft = 8070450532247928832uL;
     }
@@ -1408,69 +1280,57 @@ struct Chess_state  {
       castleRight = 6uL;
       castleLeft = 112uL;
     }
-    if (((((castle & 1) != 0) && (!isBlack)) || (((castle & 4) != 0) && isBlack))  && (totalOccupied & castleLeft) == 0 && isCastlePossible(isBlack, false)){
+    if (((((castle & 1) != 0) && (!isBlackTurn)) || (((castle & 4) != 0) && isBlackTurn))  && (totalOccupied & castleLeft) == 0 && isCastlePossible(false)){
       int initCastle = castle;
       ulong initHash = hash;
       ulong initEnPasant = enPasant;
       hash ^= randomCastleFlags[castle];
-      if (isBlack){
+      if (isBlackTurn){
 	castle &= 3;
       }
       else {
 	castle &= 12;
       }
       hash ^= randomCastleFlags[castle];
-      makeCastle(isBlack, false);
-      int score = -negamax( -beta, -alpha, depth-1, (!isBlack));
-      unmakeCastle(isBlack, false);
+      makeCastle(false);
+      int score = -negamax( -beta, -alpha, depth-1);
+      unmakeCastle(false);
       hash = initHash;
       castle = initCastle;
       enPasant = initEnPasant;
       if( score > alpha ){
 	alpha = score;
-	if (isBlack)
+	if (isBlackTurn)
 	  bestMove = Move(59, 61, 5, 6, score);
 	else
 	  bestMove = Move(3, 5, 5, 6, score);
       }
-      // if (isBlack){
-      // 	insertMove(Move(59, 61, 5, 6, score));
-      // }
-      // else {
-      // 	insertMove(Move(3, 5, 5, 6, score));
-      // }
     }
-    if (((((castle & 2) != 0) && (!isBlack)) || (((castle & 8) != 0) && isBlack)) && (totalOccupied & castleRight) == 0&& isCastlePossible(isBlack, true)){
+    if (((((castle & 2) != 0) && (!isBlackTurn)) || (((castle & 8) != 0) && isBlackTurn)) && (totalOccupied & castleRight) == 0&& isCastlePossible(true)){
       int initCastle = castle;
       ulong initHash = hash;
       ulong initEnPasant = enPasant;
       hash ^= randomCastleFlags[castle];
-      if (isBlack){
+      if (isBlackTurn){
 	castle &= 3;
       }
       else {
 	castle &= 12;
       }
       hash ^= randomCastleFlags[castle];
-      makeCastle(isBlack, true);
-      int score = -negamax( -beta, -alpha, depth-1, (!isBlack));
-      unmakeCastle(isBlack, true);
+      makeCastle(true);
+      int score = -negamax( -beta, -alpha, depth-1);
+      unmakeCastle(true);
       hash = initHash;
       castle = initCastle;
       enPasant = initEnPasant;
       if( score > alpha ) {
 	alpha = score;
-	if (isBlack)
+	if (isBlackTurn)
 	  bestMove = Move(59, 57, 5, 6, score);
 	else
 	  bestMove = Move(3, 1, 5, 6, score);
       }
-      // if (isBlack){
-      // 	insertMove(Move(59, 57, 5, 6, score));
-      // }
-      // else {
-      // 	insertMove(Move(3, 1, 5, 6, score));
-      // }
     }
     for (int movePieceIdx = 0; movePieceIdx < lastIdx; movePieceIdx ++){
       for (ulong b = moves[movePieceIdx].set & (~totalOccupied); b != 0; b &= (b-1)){
@@ -1478,26 +1338,24 @@ struct Chess_state  {
 	int initCastle = castle;
 	ulong initHash = hash;
 	ulong initEnPasant = enPasant;
-	changeCastle(isBlack, moves[movePieceIdx].pieceType, sq, moves[movePieceIdx].piecePos);
+	changeCastle(moves[movePieceIdx].pieceType, sq, moves[movePieceIdx].piecePos);
 	int score;
 	if (moves[movePieceIdx].pieceType == 0 && (sq <= 7 || sq >= 56)){
-	  makePawnPromotion(isBlack, 6, moves[movePieceIdx].piecePos, sq);
-	  score = -negamax( -beta, -alpha, depth-1, (!isBlack));
-	  unmakePawnPromotion(isBlack, 6, moves[movePieceIdx].piecePos, sq);
-	  // insertMove(Move(moves[movePieceIdx].piecePos, sq, 0, 6, score));
+	  makePawnPromotion(6, moves[movePieceIdx].piecePos, sq);
+	  score = -negamax( -beta, -alpha, depth-1);
+	  unmakePawnPromotion( 6, moves[movePieceIdx].piecePos, sq);
 	}
 	else {
-	  makeQuietMove(isBlack, moves[movePieceIdx].pieceType, moves[movePieceIdx].piecePos, sq);
-	  score = -negamax( -beta, -alpha, depth-1, (!isBlack));
-	  unmakeQuietMove(isBlack, moves[movePieceIdx].pieceType, moves[movePieceIdx].piecePos, sq);
-	  // insertMove(Move(moves[movePieceIdx].piecePos, sq, moves[movePieceIdx].pieceType, 6, score));
+	  makeQuietMove(moves[movePieceIdx].pieceType, moves[movePieceIdx].piecePos, sq);
+	  score = -negamax( -beta, -alpha, depth-1);
+	  unmakeQuietMove(moves[movePieceIdx].pieceType, moves[movePieceIdx].piecePos, sq);
 	}
 	castle = initCastle;
 	hash = initHash;
 	enPasant = initEnPasant;
 	if( score > alpha ) {
 	  Move m = Move(moves[movePieceIdx].piecePos, sq, moves[movePieceIdx].pieceType, 6, alpha);
-	  if (checkIfRepetition(m, isBlack)){
+	  if (checkIfRepetition(m)){
 	    score = 0;
 	    m.score = 0;
 	    if (score > alpha){
@@ -1520,11 +1378,11 @@ struct Chess_state  {
     return bestMove;
   }
   
-  Move genBestMove (bool isBlack){
+  Move genBestMove (){
     currDepth = 3;
     Move bestMove;
     while (true){
-      bestMove = negaDriver(isBlack);
+      bestMove = negaDriver();
       currDepth ++;
       synchronized{
       	if (timeExceeded){
@@ -1534,9 +1392,8 @@ struct Chess_state  {
     }
     return bestMove;
   }
-  MoveSet [16] genValidMoves (bool isBlack){
-    // assert_state(8, isBlack);
-    auto moves = genMoves(isBlack);
+  MoveSet [16] genValidMoves (){
+    auto moves = genMoves();
     int lastIdx = 1;
     MoveSet [16] validMoves;
     for (; moves[lastIdx-1].pieceType != 5; lastIdx++){
@@ -1549,21 +1406,20 @@ struct Chess_state  {
     validMoves[lastIdx-1].set = 0;
     int [16] positions;
     for (int i = 0; i < lastIdx; i ++){
-      moves[i].set &= (~occupied[isBlack]);
+      moves[i].set &= (~occupied[isBlackTurn]);
       bool flag = false;
       for (ulong b = moves[i].set; b != 0; b &= (b-1)){
 	int sq = ffslminusone(b);
 	Chess_state init = state;
-	// writeln(moves[i].piecePos, " ", sq);
 	init.makeMove(moves[i].piecePos, sq);
-	if (!init.squareIsUnderAttack2(init.pieces[isBlack][5], !isBlack, (init.occupied[isBlack]|init.occupied[!isBlack]))){
+	if (!init.squareIsUnderAttack2(init.pieces[isBlackTurn][5], !isBlackTurn, (init.occupied[0]|init.occupied[1]))){
 	  validMoves[i].set |= (1uL << sq);
 	}
       } 
     }
-    ulong totalOccupied = (occupied[isBlack]|occupied[!isBlack]);
+    ulong totalOccupied = (occupied[0]|occupied[1]);
     ulong castleRight, castleLeft;
-    if (isBlack){
+    if (isBlackTurn){
       castleRight = 432345564227567616uL;
       castleLeft = 8070450532247928832uL;
     }
@@ -1571,16 +1427,16 @@ struct Chess_state  {
       castleRight = 6uL;
       castleLeft = 112uL;
     }
-    if (((((castle & 1) != 0) && (!isBlack)) || (((castle & 4) != 0) && isBlack))  && (totalOccupied & castleLeft) == 0 && isCastlePossible(isBlack, false)){
-      if (isBlack){
+    if (((((castle & 1) != 0) && (!isBlackTurn)) || (((castle & 4) != 0) && isBlackTurn))  && (totalOccupied & castleLeft) == 0 && isCastlePossible(false)){
+      if (isBlackTurn){
 	validMoves[lastIdx-1].set |= (1uL << 61);
       }
       else {
 	validMoves[lastIdx-1].set |= (1uL << 5);
       }
     }
-    if (((((castle & 2) != 0) && (!isBlack)) || (((castle & 8) != 0) && isBlack)) && (totalOccupied & castleRight) == 0&& isCastlePossible(isBlack, true)){
-      if (isBlack){
+    if (((((castle & 2) != 0) && (!isBlackTurn)) || (((castle & 8) != 0) && isBlackTurn)) && (totalOccupied & castleRight) == 0&& isCastlePossible( true)){
+      if (isBlackTurn){
 	validMoves[lastIdx-1].set |= (1uL << 57);
       }
       else {
@@ -1590,20 +1446,268 @@ struct Chess_state  {
     return validMoves;
   } 
 }
-
-Chess_state procFen (string fen){
+import std.typecons;
+import std.conv;
+Tuple!(Chess_state, "state", int, "lastKill", int, "moveNum") fenToState (string fen){
   import std.string: strip;
+  Tuple!(Chess_state, "state", int, "lastKill", int, "moveNum") toReturn;
   fen = strip(fen);
-  
-  for (int i = 0; i < 8; i ++){
-    
+  int pos = 0;
+  int chessPos = 63;
+  Chess_state st;
+  for (int i = 0; i < 6; i ++){
+    for (int j = 0; j < 2; j ++){
+      st.pieces[j][i] = 0;
+    }
   }
-  assert(false);
+  for (int i = 0; i < 8; i ++){
+    while (fen[pos] != '/' && fen[pos] != ' '){
+      switch (fen[pos]){
+      case 'p':
+	st.pieces[1][0] |= (1uL << chessPos);
+	break;
+      case 'P':
+	st.pieces[0][0] |= (1uL << chessPos);
+	break;
+      case 'n':
+	st.pieces[1][1] |= (1uL << chessPos);
+	break;
+      case 'N':
+	st.pieces[0][1] |= (1uL << chessPos);
+	break;
+      case 'b':
+	st.pieces[1][2] |= (1uL << chessPos);
+	break;
+      case 'B':
+	st.pieces[0][2] |= (1uL << chessPos);
+	break;
+      case 'r':
+	st.pieces[1][3] |= (1uL << chessPos);
+	break;
+      case 'R':
+	st.pieces[0][3] |= (1uL << chessPos);
+	break;
+      case 'q':
+	st.pieces[1][4] |= (1uL << chessPos);
+	break;
+      case 'Q':
+	st.pieces[0][4] |= (1uL << chessPos);
+	break;
+      case 'k':
+	st.pieces[1][5] |= (1uL << chessPos);
+	break;
+      case 'K':
+	st.pieces[0][5] |= (1uL << chessPos);
+	break;
+      default:
+	chessPos -= fen[pos]-'1';
+      }
+      chessPos --;
+      pos ++;
+    }
+    pos ++;
+  }
+  st.occupied[0] = 0;
+  st.occupied[1] = 0;
+  for (int i = 0; i < 6; i ++){
+    st.occupied[0] |= st.pieces[0][i];
+    st.occupied[1] |= st.pieces[1][i];
+  }
+  st.isBlackTurn = (fen[pos] == 'b');
+  pos += 2;
+  st.castle = 0;
+  int i;
+  for (i = pos; fen[i] != ' '; i ++){
+      
+  }
+  for (int j = pos; j < i; j ++){
+    if (fen[j] == 'K'){
+      st.castle += 2;
+    }
+    else if (fen[j] == 'Q'){
+      st.castle += 1;
+    }
+    else if (fen[j] == 'k'){
+      st.castle += 8;
+    }
+    else if (fen[j] == 'q'){
+      st.castle += 4;
+    }
+  }
+  pos = i+1;
+  if (fen[pos] != '-'){
+    int x = 'h' - fen[pos];
+    int y = 7 - cast(int)('8' - fen[pos+1]);
+    st.enPasant = (1uL << (y*8 + x));
+    pos += 3;
+  }
+  else {
+    pos += 2;
+  }
+  st.setHash();
+  st.setEval();
+  toReturn.state = st;
+  if (fen[pos+1] != ' '){
+    int lastK = to!int(fen[pos .. pos+2]);
+    toReturn.lastKill = lastK;
+    pos += 3;
+  }
+  else {
+    int lastK = to!int(fen[pos .. pos+1]);
+    toReturn.lastKill = lastK;
+    pos += 2;
+  }
+  int smn = to!int(fen[pos .. $]) - 1;
+  toReturn.moveNum = smn*2;
+  if (st.isBlackTurn){
+    toReturn.moveNum ++;
+  }
+  return toReturn;
 }
 
-bool checkIfRepetition (Move m, bool isBlack){
+string stateToFen (Chess_state st, int lastK, int moveNum){
+  string fen = "";
+  int count = 0;
+  import std.conv;
+  for (int i = 63; i >= 0; i --){
+    ulong pos = (1uL << i);
+    if ((st.pieces[0][0] & pos) != 0){
+      if (count != 0){
+	fen ~= to!string(count);
+	count = 0;
+      }
+      fen ~= 'P';
+    }
+    else if ((st.pieces[1][0] & pos) != 0){
+      if (count != 0){
+	fen ~= to!string(count);
+	count = 0;
+      }
+      fen ~= 'p';
+    }
+    else if ((st.pieces[0][1] & pos) != 0){
+      if (count != 0){
+	fen ~= to!string(count);
+	count = 0;
+      }
+      fen ~= 'N';
+    }
+    else if ((st.pieces[1][1] & pos) != 0){
+      if (count != 0){
+	fen ~= to!string(count);
+	count = 0;
+      }
+      fen ~= 'n';
+    }
+    else if ((st.pieces[0][2] & pos) != 0){
+      if (count != 0){
+	fen ~= to!string(count);
+	count = 0;
+      }
+      fen ~= 'B';
+    }
+    else if ((st.pieces[1][2] & pos) != 0){
+      if (count != 0){
+	fen ~= to!string(count);
+	count = 0;
+      }
+      fen ~= 'b';
+    }
+    else if ((st.pieces[0][3] & pos) != 0){
+      if (count != 0){
+	fen ~= to!string(count);
+	count = 0;
+      }
+      fen ~= 'R';
+    }
+    else if ((st.pieces[1][3] & pos) != 0){
+      if (count != 0){
+	fen ~= to!string(count);
+	count = 0;
+      }
+      fen ~= 'r';
+    }
+    else if ((st.pieces[0][4] & pos) != 0){
+      if (count != 0){
+	fen ~= to!string(count);
+	count = 0;
+      }
+      fen ~= 'Q';
+    }
+    else if ((st.pieces[1][4] & pos) != 0){
+      if (count != 0){
+	fen ~= to!string(count);
+	count = 0;
+      }
+      fen ~= 'q';
+    }
+    else if ((st.pieces[0][5] & pos) != 0){
+      if (count != 0){
+	fen ~= to!string(count);
+	count = 0;
+      }
+      fen ~= 'K';
+    }
+    else if ((st.pieces[1][5] & pos) != 0){
+      if (count != 0){
+	fen ~= to!string(count);
+	count = 0;
+      }
+      fen ~= 'k';
+    }
+    else {
+      count ++;
+    }
+    if (i%8 == 0 && i != 0){
+      if (count != 0){
+	fen ~= to!string(count);
+	count = 0;
+      }
+      fen ~= '/';
+    }
+  }
+  fen ~= ' ';
+  if (st.isBlackTurn){
+    fen ~= 'b';
+  }
+  else {
+    fen ~= 'w';
+  }
+  fen ~= ' ';
+  if ((st.castle & 2) != 0){
+    fen ~= 'K';
+  }
+  if ((st.castle & 1) != 0){
+    fen ~= 'Q';
+  }
+  if ((st.castle & 8) != 0){
+    fen ~= 'k';
+  }
+  if ((st.castle & 4) != 0){
+    fen ~= 'q';
+  }
+  if (st.castle == 0){
+    fen ~= '-';
+  }
+  fen ~= ' ';
+  if (st.enPasant == 0){
+    fen ~= '-';
+  }
+  else {
+    int p = ffslminusone(st.enPasant);
+    int x = p%8;
+    int y = p/8;
+    fen ~= cast(char)('h' - x);
+    fen ~= to!string(y+1);
+  }
+  fen ~= ' ';
+  fen ~= to!string(lastK) ~ " " ~ to!string(moveNum/2+1);
+  return fen;
+}
+
+bool checkIfRepetition (Move m){
   Chess_state temp = state;
-  temp.makeMove(m, isBlack);
+  temp.makeMove(m);
   if (temp.hash in numTimes && numTimes[temp.hash] >= 2){
     return true;
   }
@@ -1616,8 +1720,8 @@ void printMoves (MoveSet [16] moves){
     printBoard((1uL << moves[i].piecePos));
   }
 }
+
 Chess_state state;
 data [ulong] transpositionTable;
 int [ulong] numTimes;
 
-// CHANGE TRANSPOSITION TABLES TO NOT STORE AT BETA CUTOFF
