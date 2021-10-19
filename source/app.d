@@ -464,7 +464,7 @@ class ChessBoard : MainWindow
 
   void setImages (ulong [6][2] pieces){
     for (int i = 0; i < 64; i ++){
-      string imagePath = "/home/ramanuj/code/chess/chess_pieces/";
+      string imagePath = "chess_pieces/";
       ulong num = 1uL << i;
       for (int j = 0; j < 6; j ++){
 	if ((pieces[0][j] & num) != 0){
